@@ -10,5 +10,10 @@
     "test": "node --test",
     "check": "node scripts/check.mjs"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "happy-dom": "^21.0.4"
+  }
 }

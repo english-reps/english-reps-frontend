@@ -1,0 +1,910 @@
+{
+  "version": 1,
+  "source": {
+    "title": "English Reps 自編應答練習",
+    "description": "參考多益 Part 2 的應答題型自行編寫，非 ETS 官方試題；未使用第三方題目或錄音。",
+    "count": 30
+  },
+  "entries": [
+    {
+      "id": "listen-001",
+      "topic": "workplace",
+      "prompt": "When will the staff meeting begin?",
+      "promptZh": "員工會議什麼時候開始？",
+      "options": [
+        {
+          "label": "A",
+          "text": "At nine thirty tomorrow morning.",
+          "translation": "明天早上九點半。"
+        },
+        {
+          "label": "B",
+          "text": "The meeting room is on the second floor.",
+          "translation": "會議室在二樓。"
+        },
+        {
+          "label": "C",
+          "text": "About the new company policy.",
+          "translation": "關於公司的新政策。"
+        }
+      ],
+      "answer": "A",
+      "explanation": "When 問時間，A 回答明天早上九點半；B 是地點，C 是會議主題。",
+      "keywords": [
+        "staff",
+        "meeting",
+        "policy"
+      ]
+    },
+    {
+      "id": "listen-002",
+      "topic": "workplace",
+      "prompt": "Could you print twenty copies of this report?",
+      "promptZh": "可以幫我印二十份這份報告嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "The printer was expensive.",
+          "translation": "那台印表機很貴。"
+        },
+        {
+          "label": "B",
+          "text": "Sure, I will bring them to your desk.",
+          "translation": "沒問題，我會送到你的桌上。"
+        },
+        {
+          "label": "C",
+          "text": "It was a very interesting report.",
+          "translation": "那是一份很有趣的報告。"
+        }
+      ],
+      "answer": "B",
+      "explanation": "這是 Could you 開頭的請求。B 表示願意幫忙；A、C 都沒有回應列印的請求。",
+      "keywords": [
+        "printer",
+        "report",
+        "desk"
+      ]
+    },
+    {
+      "id": "listen-003",
+      "topic": "workplace",
+      "prompt": "Who is responsible for ordering office supplies?",
+      "promptZh": "誰負責訂購辦公用品？",
+      "options": [
+        {
+          "label": "A",
+          "text": "We usually order them online.",
+          "translation": "我們通常在網路上訂購。"
+        },
+        {
+          "label": "B",
+          "text": "The supplies arrived this morning.",
+          "translation": "用品今天早上送到了。"
+        },
+        {
+          "label": "C",
+          "text": "Maya in the purchasing department.",
+          "translation": "採購部的 Maya。"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Who 問負責的人，因此選 C。A 回答方式，B 回答到貨時間。",
+      "keywords": [
+        "responsible",
+        "supplies",
+        "department"
+      ]
+    },
+    {
+      "id": "listen-004",
+      "topic": "workplace",
+      "prompt": "Has the manager approved the budget yet?",
+      "promptZh": "經理已經核准預算了嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "She is still reviewing it.",
+          "translation": "她還在審核。"
+        },
+        {
+          "label": "B",
+          "text": "The manager sits near the window.",
+          "translation": "經理坐在窗邊。"
+        },
+        {
+          "label": "C",
+          "text": "Our office opens at eight.",
+          "translation": "我們辦公室八點開門。"
+        }
+      ],
+      "answer": "A",
+      "explanation": "問題詢問預算是否已核准。A 用「仍在審核」間接表示尚未完成，不一定要用 Yes 或 No 回答。",
+      "keywords": [
+        "manager",
+        "budget",
+        "approve"
+      ]
+    },
+    {
+      "id": "listen-005",
+      "topic": "workplace",
+      "prompt": "Where should I leave the signed contract?",
+      "promptZh": "簽好的合約應該放在哪裡？",
+      "options": [
+        {
+          "label": "A",
+          "text": "I signed it this afternoon.",
+          "translation": "我今天下午簽好了。"
+        },
+        {
+          "label": "B",
+          "text": "Please put it in the blue folder on my desk.",
+          "translation": "請放在我桌上的藍色資料夾裡。"
+        },
+        {
+          "label": "C",
+          "text": "The contract lasts for two years.",
+          "translation": "合約有效期是兩年。"
+        }
+      ],
+      "answer": "B",
+      "explanation": "Where 問放置地點，B 說明應放在桌上的藍色資料夾裡。A 是時間，C 是期限。",
+      "keywords": [
+        "contract",
+        "folder",
+        "desk"
+      ]
+    },
+    {
+      "id": "listen-006",
+      "topic": "workplace",
+      "prompt": "Why was the presentation postponed?",
+      "promptZh": "簡報為什麼延期了？",
+      "options": [
+        {
+          "label": "A",
+          "text": "It will take about thirty minutes.",
+          "translation": "大約需要三十分鐘。"
+        },
+        {
+          "label": "B",
+          "text": "I prepared some slides for it.",
+          "translation": "我為簡報準備了一些投影片。"
+        },
+        {
+          "label": "C",
+          "text": "The client asked for more time to prepare.",
+          "translation": "客戶要求多一點準備時間。"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Why 問原因，C 解釋客戶需要更多準備時間。A 是所需時間，B 是準備內容。",
+      "keywords": [
+        "presentation",
+        "postpone",
+        "client"
+      ]
+    },
+    {
+      "id": "listen-007",
+      "topic": "workplace",
+      "prompt": "Would you like me to reserve a larger room?",
+      "promptZh": "需要我幫忙預訂大一點的會議室嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "Yes, we are expecting twelve people.",
+          "translation": "好，我們預計會有十二個人。"
+        },
+        {
+          "label": "B",
+          "text": "The room has a large window.",
+          "translation": "那間房間有一扇大窗戶。"
+        },
+        {
+          "label": "C",
+          "text": "I reserved a train ticket yesterday.",
+          "translation": "我昨天訂了一張火車票。"
+        }
+      ],
+      "answer": "A",
+      "explanation": "這是主動提供協助。A 接受提議，並說明有十二人參加的需求；B、C 沒有回應這項提議。",
+      "keywords": [
+        "reserve",
+        "expect",
+        "room"
+      ]
+    },
+    {
+      "id": "listen-008",
+      "topic": "workplace",
+      "prompt": "How can I register for the training session?",
+      "promptZh": "我要怎麼報名這場訓練？",
+      "options": [
+        {
+          "label": "A",
+          "text": "The session lasted two hours.",
+          "translation": "那場訓練持續了兩小時。"
+        },
+        {
+          "label": "B",
+          "text": "Fill out the form on the staff website.",
+          "translation": "填寫員工網站上的表格。"
+        },
+        {
+          "label": "C",
+          "text": "The trainer is from Australia.",
+          "translation": "講師來自澳洲。"
+        }
+      ],
+      "answer": "B",
+      "explanation": "How can I 問報名方法，B 提供明確步驟；A 是時間長度，C 是講師資訊。",
+      "keywords": [
+        "register",
+        "training",
+        "form"
+      ]
+    },
+    {
+      "id": "listen-009",
+      "topic": "workplace",
+      "prompt": "Is Daniel available to discuss the project now?",
+      "promptZh": "Daniel 現在有空討論專案嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "The project is about new software.",
+          "translation": "這個專案是關於新軟體的。"
+        },
+        {
+          "label": "B",
+          "text": "We discussed it last Tuesday.",
+          "translation": "我們上星期二討論過了。"
+        },
+        {
+          "label": "C",
+          "text": "He is with a customer until three.",
+          "translation": "他三點以前都在接待客戶。"
+        }
+      ],
+      "answer": "C",
+      "explanation": "C 表示 Daniel 目前正在接待客戶，間接回答現在沒空。A、B 都沒有說明他現在是否有空。",
+      "keywords": [
+        "available",
+        "project",
+        "customer"
+      ]
+    },
+    {
+      "id": "listen-010",
+      "topic": "workplace",
+      "prompt": "Please send me a reminder before the deadline.",
+      "promptZh": "請在截止期限前提醒我。",
+      "options": [
+        {
+          "label": "A",
+          "text": "I will email you on Thursday morning.",
+          "translation": "我星期四早上會寄信提醒你。"
+        },
+        {
+          "label": "B",
+          "text": "The email address belongs to the supplier.",
+          "translation": "那個電子郵件地址是供應商的。"
+        },
+        {
+          "label": "C",
+          "text": "The line outside was very long.",
+          "translation": "外面的隊伍很長。"
+        }
+      ],
+      "answer": "A",
+      "explanation": "這是一個提醒的請求。A 承諾寄信提醒；B、C 沒有回應請求。deadline 指截止期限，與 line 的隊伍意思不同。",
+      "keywords": [
+        "reminder",
+        "deadline",
+        "email"
+      ]
+    },
+    {
+      "id": "listen-011",
+      "topic": "travel",
+      "prompt": "Where can I catch the airport shuttle?",
+      "promptZh": "我在哪裡可以搭機場接駁車？",
+      "options": [
+        {
+          "label": "A",
+          "text": "It leaves every twenty minutes.",
+          "translation": "每二十分鐘發一班車。"
+        },
+        {
+          "label": "B",
+          "text": "Just outside the main entrance.",
+          "translation": "就在主要入口外面。"
+        },
+        {
+          "label": "C",
+          "text": "The airport is quite busy today.",
+          "translation": "機場今天相當忙。"
+        }
+      ],
+      "answer": "B",
+      "explanation": "Where 問乘車地點，B 回答主要入口外。A 是班次頻率，C 是機場的狀況。",
+      "keywords": [
+        "airport",
+        "shuttle",
+        "entrance"
+      ]
+    },
+    {
+      "id": "listen-012",
+      "topic": "travel",
+      "prompt": "Why has our flight been delayed?",
+      "promptZh": "我們的班機為什麼延誤了？",
+      "options": [
+        {
+          "label": "A",
+          "text": "We are flying to Singapore.",
+          "translation": "我們要飛往新加坡。"
+        },
+        {
+          "label": "B",
+          "text": "Your seat is next to the aisle.",
+          "translation": "你的座位靠走道。"
+        },
+        {
+          "label": "C",
+          "text": "There is heavy fog at the destination.",
+          "translation": "目的地有濃霧。"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Why 問延誤原因，C 的濃霧是合理原因；A 是目的地，B 是座位資訊。",
+      "keywords": [
+        "flight",
+        "delay",
+        "destination"
+      ]
+    },
+    {
+      "id": "listen-013",
+      "topic": "travel",
+      "prompt": "May I see your boarding pass, please?",
+      "promptZh": "可以讓我看一下你的登機證嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "Certainly, here it is.",
+          "translation": "當然，在這裡。"
+        },
+        {
+          "label": "B",
+          "text": "I enjoyed the flight very much.",
+          "translation": "我很享受這趟飛行。"
+        },
+        {
+          "label": "C",
+          "text": "The board is made of wood.",
+          "translation": "那塊板子是木製的。"
+        }
+      ],
+      "answer": "A",
+      "explanation": "May I see 是查看文件的禮貌請求，A 提供登機證。不要被 boarding 和 board 的相似字形誤導。",
+      "keywords": [
+        "boarding pass",
+        "certainly",
+        "flight"
+      ]
+    },
+    {
+      "id": "listen-014",
+      "topic": "travel",
+      "prompt": "What time does the hotel serve breakfast?",
+      "promptZh": "飯店幾點供應早餐？",
+      "options": [
+        {
+          "label": "A",
+          "text": "The hotel has two restaurants.",
+          "translation": "飯店有兩間餐廳。"
+        },
+        {
+          "label": "B",
+          "text": "From six thirty until ten.",
+          "translation": "從六點半到十點。"
+        },
+        {
+          "label": "C",
+          "text": "I would prefer a room with a view.",
+          "translation": "我比較想要有景觀的房間。"
+        }
+      ],
+      "answer": "B",
+      "explanation": "What time 問時間，B 提供早餐時段；A 是餐廳數量，C 是房型偏好。",
+      "keywords": [
+        "hotel",
+        "serve",
+        "breakfast"
+      ]
+    },
+    {
+      "id": "listen-015",
+      "topic": "travel",
+      "prompt": "Who should I contact about my missing suitcase?",
+      "promptZh": "行李箱不見了，我應該聯絡誰？",
+      "options": [
+        {
+          "label": "A",
+          "text": "My suitcase is dark green.",
+          "translation": "我的行李箱是深綠色的。"
+        },
+        {
+          "label": "B",
+          "text": "The flight took three hours.",
+          "translation": "這趟飛行花了三個小時。"
+        },
+        {
+          "label": "C",
+          "text": "The agent at the baggage service desk.",
+          "translation": "行李服務櫃台的人員。"
+        }
+      ],
+      "answer": "C",
+      "explanation": "Who 問應聯絡的人，C 指向行李服務人員。A 描述外觀，B 描述飛行時間。",
+      "keywords": [
+        "contact",
+        "suitcase",
+        "baggage"
+      ]
+    },
+    {
+      "id": "listen-016",
+      "topic": "travel",
+      "prompt": "How far is the station from the conference venue?",
+      "promptZh": "車站離會議場地有多遠？",
+      "options": [
+        {
+          "label": "A",
+          "text": "It is about a ten-minute walk.",
+          "translation": "步行大約十分鐘。"
+        },
+        {
+          "label": "B",
+          "text": "The conference starts next week.",
+          "translation": "會議下星期開始。"
+        },
+        {
+          "label": "C",
+          "text": "The train ticket is in my bag.",
+          "translation": "火車票在我的包包裡。"
+        }
+      ],
+      "answer": "A",
+      "explanation": "How far 問距離，也能用步行所需時間回答。A 合適；B、C 分別是活動時間和物品位置。",
+      "keywords": [
+        "station",
+        "conference",
+        "venue"
+      ]
+    },
+    {
+      "id": "listen-017",
+      "topic": "travel",
+      "prompt": "Can I pay for the taxi with a credit card?",
+      "promptZh": "計程車可以刷信用卡付款嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "The taxi is parked outside.",
+          "translation": "計程車停在外面。"
+        },
+        {
+          "label": "B",
+          "text": "Yes, most major cards are accepted.",
+          "translation": "可以，大多數主要信用卡都能使用。"
+        },
+        {
+          "label": "C",
+          "text": "My office is near the bank.",
+          "translation": "我的辦公室在銀行附近。"
+        }
+      ],
+      "answer": "B",
+      "explanation": "問題詢問付款方式。B 明確說可以使用信用卡；A、C 都只提供地點資訊。",
+      "keywords": [
+        "taxi",
+        "credit card",
+        "accept"
+      ]
+    },
+    {
+      "id": "listen-018",
+      "topic": "travel",
+      "prompt": "We will arrive after midnight. Can you keep our reservation?",
+      "promptZh": "我們會在午夜後抵達，可以保留我們的訂房嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "Our hotel was built last year.",
+          "translation": "我們飯店是去年蓋的。"
+        },
+        {
+          "label": "B",
+          "text": "I arrived at the office early.",
+          "translation": "我很早就到了辦公室。"
+        },
+        {
+          "label": "C",
+          "text": "Of course. I will note your late arrival.",
+          "translation": "當然，我會註記你們較晚抵達。"
+        }
+      ],
+      "answer": "C",
+      "explanation": "旅客要求保留訂房。C 同意並記錄晚到資訊；A、B 無法處理這個需求。",
+      "keywords": [
+        "arrive",
+        "reservation",
+        "arrival"
+      ]
+    },
+    {
+      "id": "listen-019",
+      "topic": "travel",
+      "prompt": "Would you prefer a window seat or an aisle seat?",
+      "promptZh": "你比較喜歡靠窗還是靠走道的座位？",
+      "options": [
+        {
+          "label": "A",
+          "text": "A window seat, if one is available.",
+          "translation": "如果還有的話，我想要靠窗座位。"
+        },
+        {
+          "label": "B",
+          "text": "Yes, I have seen that window.",
+          "translation": "是的，我看過那扇窗戶。"
+        },
+        {
+          "label": "C",
+          "text": "The departure was delayed yesterday.",
+          "translation": "昨天出發時間延誤了。"
+        }
+      ],
+      "answer": "A",
+      "explanation": "這是二選一的偏好問題，A 選擇靠窗。B 的 Yes 沒有選擇座位，C 與偏好無關。",
+      "keywords": [
+        "prefer",
+        "seat",
+        "available"
+      ]
+    },
+    {
+      "id": "listen-020",
+      "topic": "travel",
+      "prompt": "Is there an additional fee to change my train ticket?",
+      "promptZh": "更改火車票需要額外費用嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "The train has already left.",
+          "translation": "火車已經開走了。"
+        },
+        {
+          "label": "B",
+          "text": "There is no charge if you change it today.",
+          "translation": "如果今天更改就不收費。"
+        },
+        {
+          "label": "C",
+          "text": "I bought some tickets for the concert.",
+          "translation": "我買了幾張演唱會門票。"
+        }
+      ],
+      "answer": "B",
+      "explanation": "B 直接回答改票是否收費，並補充今天更改免費的條件。A、C 沒有回答費用問題。",
+      "keywords": [
+        "additional",
+        "fee",
+        "ticket"
+      ]
+    },
+    {
+      "id": "listen-021",
+      "topic": "service",
+      "prompt": "Do I need the receipt to return this item?",
+      "promptZh": "退這件商品需要收據嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "The item is on the top shelf.",
+          "translation": "商品在最上層的架子上。"
+        },
+        {
+          "label": "B",
+          "text": "I received a call this morning.",
+          "translation": "我今天早上接到一通電話。"
+        },
+        {
+          "label": "C",
+          "text": "Yes, please bring it with the item.",
+          "translation": "需要，請把收據和商品一起帶來。"
+        }
+      ],
+      "answer": "C",
+      "explanation": "C 回答退貨需要收據。receipt 是收據，不能因為 received 的發音相近而選 B。",
+      "keywords": [
+        "receipt",
+        "return",
+        "item"
+      ]
+    },
+    {
+      "id": "listen-022",
+      "topic": "service",
+      "prompt": "When is payment for this invoice due?",
+      "promptZh": "這張發票的付款期限是什麼時候？",
+      "options": [
+        {
+          "label": "A",
+          "text": "By the end of this month.",
+          "translation": "這個月底以前。"
+        },
+        {
+          "label": "B",
+          "text": "Please send the package by courier.",
+          "translation": "請用快遞寄送包裹。"
+        },
+        {
+          "label": "C",
+          "text": "The invoice number is at the top.",
+          "translation": "發票號碼在上方。"
+        }
+      ],
+      "answer": "A",
+      "explanation": "When 和 due 詢問付款期限，A 回答月底以前；B 是寄送方式，C 是號碼的位置。",
+      "keywords": [
+        "payment",
+        "invoice",
+        "due"
+      ]
+    },
+    {
+      "id": "listen-023",
+      "topic": "service",
+      "prompt": "Could you tell me when my package will arrive?",
+      "promptZh": "可以告訴我包裹什麼時候會送達嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "I ordered a new printer.",
+          "translation": "我訂了一台新印表機。"
+        },
+        {
+          "label": "B",
+          "text": "It is scheduled for delivery tomorrow.",
+          "translation": "預計明天配送。"
+        },
+        {
+          "label": "C",
+          "text": "The shipping box is quite large.",
+          "translation": "運送的箱子相當大。"
+        }
+      ],
+      "answer": "B",
+      "explanation": "雖以 Could you 開頭，重點是 when my package will arrive。B 回答預計送達時間。",
+      "keywords": [
+        "package",
+        "delivery",
+        "schedule"
+      ]
+    },
+    {
+      "id": "listen-024",
+      "topic": "service",
+      "prompt": "How long will the discount be available?",
+      "promptZh": "折扣會持續多久？",
+      "options": [
+        {
+          "label": "A",
+          "text": "The store is on the first floor.",
+          "translation": "商店在一樓。"
+        },
+        {
+          "label": "B",
+          "text": "I usually shop on weekends.",
+          "translation": "我通常在週末購物。"
+        },
+        {
+          "label": "C",
+          "text": "Until Sunday evening.",
+          "translation": "到星期日晚上。"
+        }
+      ],
+      "answer": "C",
+      "explanation": "How long 問促銷持續期間。C 提供結束時間；A 是地點，B 是個人習慣。",
+      "keywords": [
+        "discount",
+        "available",
+        "store"
+      ]
+    },
+    {
+      "id": "listen-025",
+      "topic": "service",
+      "prompt": "Do you have this jacket in a larger size?",
+      "promptZh": "這件外套有大一點的尺寸嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "Let me check our stock for you.",
+          "translation": "我幫你確認一下庫存。"
+        },
+        {
+          "label": "B",
+          "text": "The jacket has two pockets.",
+          "translation": "那件外套有兩個口袋。"
+        },
+        {
+          "label": "C",
+          "text": "I brought an umbrella today.",
+          "translation": "我今天帶了雨傘。"
+        }
+      ],
+      "answer": "A",
+      "explanation": "A 提議查庫存，是對尺寸需求的合理回應；此題不必用 Yes 或 No 開頭。",
+      "keywords": [
+        "size",
+        "stock",
+        "check"
+      ]
+    },
+    {
+      "id": "listen-026",
+      "topic": "service",
+      "prompt": "I need to reschedule my appointment for Friday.",
+      "promptZh": "我需要把預約改到星期五。",
+      "options": [
+        {
+          "label": "A",
+          "text": "The office is near the clinic.",
+          "translation": "辦公室在診所附近。"
+        },
+        {
+          "label": "B",
+          "text": "Would ten in the morning work for you?",
+          "translation": "早上十點你方便嗎？"
+        },
+        {
+          "label": "C",
+          "text": "The appointment took half an hour.",
+          "translation": "那次預約花了半小時。"
+        }
+      ],
+      "answer": "B",
+      "explanation": "對方提出改期需求，B 進一步確認可行時間。A 是地點，C 是過去一次預約的長度。",
+      "keywords": [
+        "reschedule",
+        "appointment",
+        "Friday"
+      ]
+    },
+    {
+      "id": "listen-027",
+      "topic": "service",
+      "prompt": "May I speak to someone in technical support?",
+      "promptZh": "可以請技術支援人員接電話嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "The support team has six members.",
+          "translation": "支援團隊有六個人。"
+        },
+        {
+          "label": "B",
+          "text": "I spoke to him yesterday.",
+          "translation": "我昨天跟他說過話。"
+        },
+        {
+          "label": "C",
+          "text": "Please hold while I transfer your call.",
+          "translation": "請稍候，我幫你轉接。"
+        }
+      ],
+      "answer": "C",
+      "explanation": "C 的轉接處理符合找技術支援人員的要求；A、B 沒有協助接通。",
+      "keywords": [
+        "technical",
+        "support",
+        "transfer"
+      ]
+    },
+    {
+      "id": "listen-028",
+      "topic": "service",
+      "prompt": "What should I do if the device stops working?",
+      "promptZh": "如果裝置停止運作，我該怎麼辦？",
+      "options": [
+        {
+          "label": "A",
+          "text": "Contact us for a replacement under the warranty.",
+          "translation": "請聯絡我們，依保固辦理更換。"
+        },
+        {
+          "label": "B",
+          "text": "The device is very lightweight.",
+          "translation": "這台裝置非常輕。"
+        },
+        {
+          "label": "C",
+          "text": "Our shop closes at eight.",
+          "translation": "我們商店八點關門。"
+        }
+      ],
+      "answer": "A",
+      "explanation": "What should I do 問處理方法，A 提供聯絡和更換流程；B、C 不是處理故障的方法。",
+      "keywords": [
+        "device",
+        "replacement",
+        "warranty"
+      ]
+    },
+    {
+      "id": "listen-029",
+      "topic": "service",
+      "prompt": "How many people will be joining your dinner reservation?",
+      "promptZh": "你的晚餐訂位總共有幾個人？",
+      "options": [
+        {
+          "label": "A",
+          "text": "The restaurant serves Italian food.",
+          "translation": "這間餐廳供應義大利料理。"
+        },
+        {
+          "label": "B",
+          "text": "Six, including two children.",
+          "translation": "六個人，包含兩個小孩。"
+        },
+        {
+          "label": "C",
+          "text": "We would like to sit by the window.",
+          "translation": "我們想坐窗邊。"
+        }
+      ],
+      "answer": "B",
+      "explanation": "How many people 問人數，B 回答六人。A 是料理種類，C 是座位偏好。",
+      "keywords": [
+        "reservation",
+        "including",
+        "restaurant"
+      ]
+    },
+    {
+      "id": "listen-030",
+      "topic": "service",
+      "prompt": "Can I cancel my subscription before the next payment?",
+      "promptZh": "我可以在下次付款前取消訂閱嗎？",
+      "options": [
+        {
+          "label": "A",
+          "text": "Your account name appears here.",
+          "translation": "你的帳戶名稱顯示在這裡。"
+        },
+        {
+          "label": "B",
+          "text": "The next train leaves in ten minutes.",
+          "translation": "下一班火車十分鐘後開。"
+        },
+        {
+          "label": "C",
+          "text": "Yes, use the cancellation option in your account settings.",
+          "translation": "可以，在帳戶設定中選擇取消訂閱。"
+        }
+      ],
+      "answer": "C",
+      "explanation": "C 回答可否取消，並提供操作方法。A 只談帳戶名稱，B 的 next train 與 next payment 無關。",
+      "keywords": [
+        "cancel",
+        "subscription",
+        "payment"
+      ]
+    }
+  ]
+}

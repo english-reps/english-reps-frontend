@@ -1,8 +1,10 @@
 import { STORAGE_KEY, SESSION_SIZE, definition, shuffle, filterEntries, makeQuestion, loadProgress, recordResult, progressStats } from './lib.js';
+import { ListeningPractice } from './listening.js';
 
 const $ = selector => document.querySelector(selector);
 const state = { entries: [], records: {}, view: 'practice', mode: 'cards', session: [], index: 0, revealed: false, answer: null, options: [], results: [], page: 1 };
 const PAGE_SIZE = 30;
+const listening = new ListeningPractice($('#listening-view'), () => { $('#storage-notice').hidden = false; });
 const node = (tag, className, text) => {
   const result = document.createElement(tag);
   if (className) result.className = className;
@@ -231,18 +233,29 @@ function renderSummary(root) {
 }
 
 function setView(view) {
+  listening.leave();
+  window.speechSynthesis?.cancel();
   state.view = view;
   $('#practice-view').hidden = view !== 'practice';
   $('#library-view').hidden = view !== 'library';
-  for (const name of ['practice', 'library']) {
+  $('#listening-view').hidden = view !== 'listening';
+  for (const name of ['practice', 'library', 'listening']) {
     const control = $(`#nav-${name}`);
     control.classList.toggle('active', name === view);
     if (name === view) control.setAttribute('aria-current', 'page');
     else control.removeAttribute('aria-current');
   }
-  $('#page-title').replaceChildren(document.createTextNode(view === 'practice' ? '把單字，練成直覺' : '你的英文，從這裡累積'), node('span', '', '。'));
-  $('#page-description').textContent = view === 'practice' ? '不用一次記住全部。今天，就從 10 個單字開始。' : '1,000 個單字、中英例句。隨時查找，把不熟的字留下來。';
+  const headings = {
+    practice: ['把單字，練成直覺', '不用一次記住全部。今天，就從 10 個單字開始。'],
+    library: ['你的英文，從這裡累積', '1,000 個單字、中英例句。隨時查找，把不熟的字留下來。'],
+    listening: ['把英文，聽進日常', '從一句問句開始。每次 10 題，練出聽懂的直覺。'],
+  };
+  $('#page-title').replaceChildren(document.createTextNode(headings[view][0]), node('span', '', '。'));
+  $('#page-description').textContent = headings[view][1];
+  $('#edition-count').textContent = view === 'listening' ? '30' : '1,000';
+  $('#edition-label').textContent = view === 'listening' ? 'ORIGINAL LISTENING QUESTIONS' : 'WORDS TO GO FURTHER';
   if (view === 'library') renderLibrary();
+  if (view === 'listening') listening.enter();
 }
 
 function renderLibrary() {
@@ -312,6 +325,7 @@ function setup() {
   for (const part of parts) $('#pos-filter').append(new Option(`${part} ${labels[part] || ''}`, part));
   $('#nav-practice').addEventListener('click', () => setView('practice'));
   $('#nav-library').addEventListener('click', () => setView('library'));
+  $('#nav-listening').addEventListener('click', () => setView('listening'));
   for (const mode of ['cards', 'quiz']) $(`#mode-${mode}`).addEventListener('click', () => {
     if (state.mode === mode) return;
     state.mode = mode;
