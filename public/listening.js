@@ -23,7 +23,11 @@ export class ListeningPractice {
     this.active = false;
     this.loading = false;
     this.ready = false;
-    this.player = new SpeechPlayer({ synthesis: window.speechSynthesis, Utterance: window.SpeechSynthesisUtterance });
+    // Restricted WebViews may throw when the speech API is accessed.
+    let synthesis, Utterance;
+    try { synthesis = window.speechSynthesis; Utterance = window.SpeechSynthesisUtterance; }
+    catch { /* The listening page still opens with unsupported-audio guidance. */ }
+    this.player = new SpeechPlayer({ synthesis, Utterance });
     this.$('#listening-retry').addEventListener('click', () => this.load());
     this.$('#listening-new-session').addEventListener('click', () => this.begin());
     for (const id of ['listening-topic', 'listening-review']) this.$(`#${id}`).addEventListener('change', () => this.begin());

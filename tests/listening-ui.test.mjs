@@ -1,21 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
 import { Window } from 'happy-dom';
 import { ListeningPractice } from '../public/listening.js';
 import { LISTENING_STORAGE_KEY } from '../public/listening-lib.js';
 import { STORAGE_KEY } from '../public/lib.js';
+import { buildSite } from '../scripts/build.mjs';
 
 const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
 const bank = JSON.parse(await readFile(new URL('../public/data/listening.json', import.meta.url), 'utf8'));
 const vocabulary = JSON.parse(await readFile(new URL('../public/data/vocabulary.json', import.meta.url), 'utf8'));
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
-function page(t, { supported = true, saved = {}, blockedStorage = false } = {}) {
+function page(t, { supported = true, saved = {}, blockedStorage = false, markup = html } = {}) {
   const window = new Window({ url: 'https://english-reps.test', settings: {
     disableJavaScriptEvaluation: true, disableJavaScriptFileLoading: true, disableCSSFileLoading: true,
   } });
-  window.document.write(html);
+  window.document.write(markup);
   const utterances = [];
   let cancellations = 0;
   if (supported) {
@@ -33,7 +38,7 @@ function page(t, { supported = true, saved = {}, blockedStorage = false } = {}) 
     option.value = value;
     return option;
   }
-  Object.assign(globalThis, { window, document: window.document, Option, fetch: async url => ({ ok: true, json: async () => structuredClone(url === '/data/vocabulary.json' ? vocabulary : bank) }) });
+  Object.assign(globalThis, { window, document: window.document, Option, fetch: async url => ({ ok: true, json: async () => structuredClone(url.startsWith('/data/vocabulary') ? vocabulary : bank) }) });
   if (!blockedStorage) globalThis.localStorage = window.localStorage;
   const root = window.document.querySelector('#listening-view');
   let storageWarnings = 0;
@@ -193,4 +198,62 @@ test('the actual app opens listening from navigation and preserves existing voca
   assert.equal($('#listening-view').hidden, true);
   assert.match($('#result-count').textContent, /1,000/);
   assert.equal(browser.window.localStorage.getItem(STORAGE_KEY), vocabProgress);
+});
+
+test('listening navigation works while vocabulary is still loading, and completion does not interrupt speech', async t => {
+  const browser = page(t);
+  let finishVocabulary;
+  const pending = new Promise(resolve => { finishVocabulary = resolve; });
+  globalThis.fetch = async url => url === '/data/vocabulary.json' ? pending : { ok: true, json: async () => structuredClone(bank) };
+  await import(`../public/app.js?deferred=${Date.now()}`);
+  const $ = selector => browser.window.document.querySelector(selector);
+  assert.equal($('#loading').hidden, false);
+  $('#nav-listening').click();
+  await tick();
+  assert.equal($('#listening-content').hidden, false);
+  assert.equal($('#listening-view').hidden, false);
+  assert.equal($('#loading').hidden, true);
+  assert.equal(browser.window.location.hash, '#listening');
+  $('#listening-play').click();
+  browser.utterances[0].onstart();
+  const before = browser.cancellations;
+  finishVocabulary({ ok: true, json: async () => structuredClone(vocabulary) });
+  await tick();
+  assert.equal(browser.cancellations, before);
+  assert.match($('#listening-play').textContent, /停止播放/);
+});
+
+test('a direct listening link opens even when vocabulary fails and speech access is restricted', async t => {
+  const browser = page(t);
+  t.mock.method(console, 'warn', () => {});
+  t.mock.method(console, 'error', () => {});
+  browser.window.history.replaceState(null, '', '#listening');
+  Object.defineProperty(browser.window, 'speechSynthesis', { get() { throw new Error('Restricted WebView'); } });
+  globalThis.fetch = async url => url === '/data/vocabulary.json' ? { ok: false } : { ok: true, json: async () => structuredClone(bank) };
+  await import(`../public/app.js?restricted=${Date.now()}`);
+  await tick();
+  const $ = selector => browser.window.document.querySelector(selector);
+  assert.equal($('#listening-content').hidden, false);
+  assert.match($('#listening-audio-status').textContent, /不支援/);
+  $('#nav-practice').click();
+  assert.equal($('#error').hidden, false);
+  $('#nav-listening').click();
+  assert.equal($('#listening-view').hidden, false);
+  assert.equal($('#error').hidden, true);
+});
+
+test('the deployable bundle opens listening with fingerprinted modules and dataset URLs', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'english-reps-ui-build-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(join(directory, 'package.json'), '{"type":"module"}');
+  const output = join(directory, 'dist');
+  const result = await buildSite({ output });
+  const browser = page(t, { markup: await readFile(join(output, 'index.html'), 'utf8') });
+  await import(pathToFileURL(join(output, result.entry)).href);
+  await tick();
+  browser.window.document.querySelector('#nav-listening').click();
+  await tick();
+  assert.equal(browser.window.document.querySelector('#listening-content').hidden, false);
+  assert.match(browser.window.document.querySelector('#page-title').textContent, /聽進日常/);
+  assert.equal(browser.window.document.querySelector('#listening-play').disabled, false);
 });
