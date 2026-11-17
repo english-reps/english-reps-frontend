@@ -1,0 +1,21 @@
+name: Frontend CI
+on:
+  pull_request:
+    branches: [develop, master, 'feature/**']
+  push:
+    branches: [develop, master]
+permissions:
+  contents: read
+jobs:
+  frontend-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
