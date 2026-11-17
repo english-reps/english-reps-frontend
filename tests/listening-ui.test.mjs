@@ -10,9 +10,9 @@ import { ListeningPractice } from '../public/listening.js';
 import { LISTENING_STORAGE_KEY } from '../public/listening-lib.js';
 import { STORAGE_KEY } from '../public/lib.js';
 import { buildSite } from '../scripts/build.mjs';
+import bank from '../public/data/listening.js';
 
 const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
-const bank = JSON.parse(await readFile(new URL('../public/data/listening.json', import.meta.url), 'utf8'));
 const vocabulary = JSON.parse(await readFile(new URL('../public/data/vocabulary.json', import.meta.url), 'utf8'));
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
@@ -38,7 +38,10 @@ function page(t, { supported = true, saved = {}, blockedStorage = false, markup 
     option.value = value;
     return option;
   }
-  Object.assign(globalThis, { window, document: window.document, Option, fetch: async url => ({ ok: true, json: async () => structuredClone(url.startsWith('/data/vocabulary') ? vocabulary : bank) }) });
+  Object.assign(globalThis, { window, document: window.document, Option, fetch: async url => {
+    assert.equal(url, '/data/vocabulary.json', 'Only vocabulary uses a separate JSON request');
+    return { ok: true, json: async () => structuredClone(vocabulary) };
+  } });
   if (!blockedStorage) globalThis.localStorage = window.localStorage;
   const root = window.document.querySelector('#listening-view');
   let storageWarnings = 0;
@@ -165,18 +168,19 @@ test('a browser without speech support displays guidance and disables play', asy
   assert.match(browser.root.querySelector('#listening-audio-status').textContent, /不支援/);
 });
 
-test('a failed listening download can be retried without losing the rest of the page', async t => {
+test('listening starts, plays, and scores without any JSON download', async t => {
   const browser = page(t);
-  t.mock.method(console, 'error', () => {});
-  globalThis.fetch = async () => ({ ok: false });
-  await browser.start();
-  assert.equal(browser.root.querySelector('#listening-error').hidden, false);
-  assert.equal(browser.root.querySelector('#listening-content').hidden, true);
-  globalThis.fetch = async () => ({ ok: true, json: async () => structuredClone(bank) });
-  browser.root.querySelector('#listening-retry').click();
-  await tick();
+  let requests = 0;
+  globalThis.fetch = async () => { requests++; throw new TypeError('Failed to fetch'); };
+  const practice = await browser.start();
+  assert.equal(practice.entries.length, 30);
   assert.equal(browser.root.querySelector('#listening-error').hidden, true);
   assert.equal(browser.root.querySelector('#listening-content').hidden, false);
+  browser.root.querySelector('#listening-play').click();
+  browser.utterances[0].onend();
+  browser.root.querySelector(`[data-choice="${practice.session[0].answer}"]`).click();
+  assert.match(browser.root.querySelector('#listening-feedback').textContent, /答對了/);
+  assert.equal(requests, 0);
 });
 
 test('the actual app opens listening from navigation and preserves existing vocabulary progress', async t => {
@@ -204,7 +208,7 @@ test('listening navigation works while vocabulary is still loading, and completi
   const browser = page(t);
   let finishVocabulary;
   const pending = new Promise(resolve => { finishVocabulary = resolve; });
-  globalThis.fetch = async url => url === '/data/vocabulary.json' ? pending : { ok: true, json: async () => structuredClone(bank) };
+  globalThis.fetch = async url => { assert.equal(url, '/data/vocabulary.json'); return pending; };
   await import(`../public/app.js?deferred=${Date.now()}`);
   const $ = selector => browser.window.document.querySelector(selector);
   assert.equal($('#loading').hidden, false);
@@ -229,7 +233,7 @@ test('a direct listening link opens even when vocabulary fails and speech access
   t.mock.method(console, 'error', () => {});
   browser.window.history.replaceState(null, '', '#listening');
   Object.defineProperty(browser.window, 'speechSynthesis', { get() { throw new Error('Restricted WebView'); } });
-  globalThis.fetch = async url => url === '/data/vocabulary.json' ? { ok: false } : { ok: true, json: async () => structuredClone(bank) };
+  globalThis.fetch = async url => { assert.equal(url, '/data/vocabulary.json'); return { ok: false }; };
   await import(`../public/app.js?restricted=${Date.now()}`);
   await tick();
   const $ = selector => browser.window.document.querySelector(selector);
@@ -249,6 +253,8 @@ test('the deployable bundle opens listening with fingerprinted modules and datas
   const output = join(directory, 'dist');
   const result = await buildSite({ output });
   const browser = page(t, { markup: await readFile(join(output, 'index.html'), 'utf8') });
+  // Resolve actual build output instead of returning canned data for any URL.
+  globalThis.fetch = async url => ({ ok: true, json: async () => JSON.parse(await readFile(join(output, url.slice(1)), 'utf8')) });
   await import(pathToFileURL(join(output, result.entry)).href);
   await tick();
   browser.window.document.querySelector('#nav-listening').click();
@@ -257,3 +263,43 @@ test('the deployable bundle opens listening with fingerprinted modules and datas
   assert.match(browser.window.document.querySelector('#page-title').textContent, /聽進日常/);
   assert.equal(browser.window.document.querySelector('#listening-play').disabled, false);
 });
+
+for (const failure of ['network', '404', 'HTML response']) {
+  test(`the deployed module graph supports listening when JSON requests fail: ${failure}`, async t => {
+    const directory = await mkdtemp(join(tmpdir(), 'english-reps-no-json-'));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    await writeFile(join(directory, 'package.json'), '{"type":"module"}');
+    const output = join(directory, 'dist');
+    const result = await buildSite({ output });
+    const browser = page(t, { markup: await readFile(join(output, 'index.html'), 'utf8') });
+    t.mock.method(console, 'error', () => {});
+    const requests = [];
+    globalThis.fetch = async url => {
+      requests.push(url);
+      if (failure === 'network') throw new TypeError('Failed to fetch');
+      if (failure === '404') return { ok: false, status: 404 };
+      return { ok: true, json: async () => JSON.parse('<!doctype html><title>App shell</title>') };
+    };
+    browser.window.history.replaceState(null, '', '#listening');
+    await import(pathToFileURL(join(output, result.entry)).href);
+    await tick();
+    const $ = selector => browser.window.document.querySelector(selector);
+    assert.equal($('#listening-view').hidden, false);
+    assert.equal($('#listening-error').hidden, true);
+    assert.equal($('#listening-content').hidden, false);
+    assert.equal($('#listening-count').textContent, '01 / 10');
+    $('#listening-play').click();
+    const utterance = browser.utterances[0];
+    const question = bank.entries.find(entry => utterance.text.startsWith(entry.prompt));
+    assert.ok(question, 'The build includes the real question bank');
+    utterance.onend();
+    $(`[data-choice="${question.answer}"]`).click();
+    assert.match($('#listening-feedback').textContent, /答對了/);
+    assert.equal(JSON.parse(browser.window.localStorage.getItem(LISTENING_STORAGE_KEY)).records[question.id].correct, 1);
+    $('#nav-practice').click();
+    assert.equal($('#error').hidden, false);
+    $('#nav-listening').click();
+    assert.equal($('#listening-content').hidden, false);
+    assert.deepEqual(requests, [result.data['/data/vocabulary.json']]);
+  });
+}

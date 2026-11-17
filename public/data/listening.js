@@ -1,4 +1,5 @@
-{
+// The small question bank ships with the listening module; no JSON request is needed.
+export default {
   "version": 1,
   "source": {
     "title": "English Reps 自編應答練習",
@@ -907,4 +908,4 @@
       ]
     }
   ]
-}
+};

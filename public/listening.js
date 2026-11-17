@@ -1,4 +1,5 @@
 import { loadProgress, recordResult, progressStats } from './lib.js';
+import listeningBank from './data/listening.js';
 import { LISTENING_STORAGE_KEY, TOPICS, validateListeningBank, createListeningSession, listeningScript, gradeListeningAnswer, SpeechPlayer } from './listening-lib.js';
 
 const element = (tag, className, text) => {
@@ -57,9 +58,7 @@ export class ListeningPractice {
     this.$('#listening-loading').hidden = false;
     this.$('#listening-error').hidden = true;
     try {
-      const response = await fetch('/data/listening.json');
-      if (!response.ok) throw new Error('Listening data request failed');
-      this.entries = validateListeningBank(await response.json());
+      this.entries = validateListeningBank(listeningBank);
       try { this.records = loadProgress(window.localStorage, new Set(this.entries.map(entry => entry.id)), LISTENING_STORAGE_KEY); }
       catch { this.onStorageError(); }
       this.ready = true;

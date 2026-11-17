@@ -1,10 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import data from '../public/data/listening.js';
 import { STORAGE_KEY, loadProgress, recordResult, progressStats } from '../public/lib.js';
 import { LISTENING_STORAGE_KEY, TOPICS, validateListeningBank, createListeningSession, listeningScript, gradeListeningAnswer, SpeechPlayer } from '../public/listening-lib.js';
 
-const data = JSON.parse(await readFile(new URL('../public/data/listening.json', import.meta.url), 'utf8'));
 const entries = validateListeningBank(data);
 
 test('30 original bilingual questions cover three topics and balanced answer labels', () => {

@@ -4,6 +4,7 @@ import { cp, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { buildSite } from '../scripts/build.mjs';
+import bank from '../public/data/listening.js';
 
 async function fixture(t) {
   const directory = await mkdtemp(join(tmpdir(), 'english-reps-assets-'));
@@ -45,15 +46,15 @@ test('changing a nested listening dependency changes the entry URL even without 
   assert.equal(next.css, first.css);
 });
 
-test('a question-bank update changes both its fetch URL and the entry graph', async t => {
+test('a bundled question-bank update changes its module URL and the entry graph', async t => {
   const options = await fixture(t);
   const first = await buildSite(options);
-  const path = join(options.source, 'data', 'listening.json');
-  const data = JSON.parse(await readFile(path, 'utf8'));
+  const path = join(options.source, 'data', 'listening.js');
+  const data = structuredClone(bank);
   data.source.description += ' Updated.';
-  await writeFile(path, JSON.stringify(data));
+  await writeFile(path, `export default ${JSON.stringify(data)};\n`);
   const next = await buildSite(options);
-  assert.notEqual(next.data['/data/listening.json'], first.data['/data/listening.json']);
+  assert.notEqual(next.modules['data/listening.js'], first.modules['data/listening.js']);
   assert.notEqual(next.entry, first.entry);
   assert.equal(next.data['/data/vocabulary.json'], first.data['/data/vocabulary.json']);
 });
