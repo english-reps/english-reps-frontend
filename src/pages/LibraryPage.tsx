@@ -93,9 +93,21 @@ export function LibraryPage() {
         {result.slice(page * 20, page * 20 + 20).map((word) => (
           <details className="word-row" key={word.id}>
             <summary className="word-row-summary">
-              <strong>{word.word}</strong>
-              <span>{definition(word)}</span>
-              <span>＋</span>
+              <span className="list-number">
+                {word.id.replace(/^word-/, "")}
+              </span>
+              <strong className="list-word" lang="en">
+                {word.word}
+              </strong>
+              <span className="list-pos">
+                {[...new Set(word.senses.map((sense) => sense.pos))].join(
+                  " / ",
+                )}
+              </span>
+              <span className="list-meaning">{definition(word)}</span>
+              <span className="expand-icon" aria-hidden="true">
+                +
+              </span>
             </summary>
             <div className="word-row-content">
               <WordDetails word={word} />
