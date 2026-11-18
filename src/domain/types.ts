@@ -35,7 +35,7 @@ export interface StudyEvent {
   event_id: string;
   entry_id: string;
   kind: "card" | "quiz" | "listening";
-  rating?: "mastered" | "review";
+  rating?: Status;
   answer?: string;
 }
 export interface EventResult {

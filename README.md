@@ -2,8 +2,7 @@
 
 React + TypeScript + Vite + React Router application for TOEIC self-learners.
 Retains 1,000 source vocabulary words, 30 original listening questions, cards/quizzes,
-search/filter/pagination and wrong-answer practice. Adds account login, private cross-device
-progress and explicit import of the old browser-only records.
+search/filter/pagination and wrong-answer practice. Adds account login and private cross-device progress.
 
 ## Run the full stack
 
@@ -52,20 +51,16 @@ If the environment uses a corporate HTTPS proxy, pass its trusted CA as an optio
 - `/practice`: 10-word cards/quizzes, unit/review filters, ratings and account mastery.
 - `/listening`: 30 original Part 2 style questions, topic/review filters, 0.8/1/1.15× voice,
   playback before answering, bilingual transcript/explanation, round score and missed-question replay.
-- `/library`: English/Chinese search, unit/part-of-speech filters and 20-word pagination.
+- `/library`: English/Chinese search, unit/part-of-speech/starred filters, star toggles for unfamiliar
+  words, and 20-word pagination.
 - `/login`, `/register`: email/password (12–128 characters), validation and cookie session.
-- `/progress`: protected account summary, wrong answers and explicit legacy import.
+- `/progress`: protected account summary and wrong/starred review answers.
 
-Guests can browse and practice; account progress is saved only after login. Failed saves display
-an explicit retry and reuse the original event ID. The server grades answers and deduplicates events.
-Progress refreshes when the window regains focus; manual refresh is also available. Logout removes
-account data from React state. Session cookies are HttpOnly, CSRF tokens remain in memory, and
-private progress is not cached in localStorage. Backend health is shown in the footer.
-
-Legacy keys `english-reps.progress.v1` and `english-reps.listening.v1` are read only after explicit
-acknowledgement in My Progress. Import keeps source records, merges counters by max and preserves
-existing server status. Browser storage is origin-bound: another domain cannot automatically read
-the old public Site's progress. No cross-domain data migration is performed by these MRs.
+Guests can browse and practice; account progress and starred unfamiliar words are saved only after login.
+Failed saves display an explicit retry and reuse the original event ID. The server grades answers and
+deduplicates events. Progress refreshes when the window regains focus; manual refresh is also available.
+Logout removes account data from React state. Session cookies are HttpOnly, CSRF tokens remain in memory,
+and private progress is not cached in localStorage. Backend health is shown in the footer.
 
 Audio uses the browser/OS English speech engine, with cancellation, startup/playback timeouts and
 unsupported guidance. Tests simulate those events; physical-device audio quality is not verified.
@@ -77,7 +72,7 @@ Questions are original self-study material, not ETS official items or confidenti
 application pages load the catalog from the API, whose immutable first migration seeds it. Do not
 change stable IDs. `scripts/import-vocabulary.py` can regenerate the vocabulary fixture from PDF text.
 Vitest/Testing Library tests cover routing/login/logout, privacy cleanup, failed-save retries,
-listening playback gating, catalog completeness, quiz choices, explicit imports and API errors/CSRF.
+listening playback gating, library star toggling/filtering, catalog completeness, quiz choices, and API errors/CSRF.
 GitHub Actions checks TypeScript, tests and the production build; recommended required check:
 `frontend-checks` (GitHub Settings → Rules → Rulesets → Require status checks).
 

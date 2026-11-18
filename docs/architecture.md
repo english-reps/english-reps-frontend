@@ -28,8 +28,7 @@ Same-origin cookies and explicit Origin checks; no CORS middleware is needed.
 - catalog_items: stable original word/listen IDs, category, JSON content; public, seeded by first migration.
 - study_events: user + client event UUID, canonical request and server-graded result; immutable, idempotent.
 - progress: user + item, status, quiz attempts/correct count, updated time.
-- progress_imports: user + import UUID, payload hash; idempotent browser-progress import receipt.
-User -> many sessions/events/progress/imports; catalog item -> many users' events/progress.
+User -> many sessions/events/progress; catalog item -> many users' events/progress.
 Every private query uses the authenticated user ID from the server, never a client-supplied owner.
 Catalog is self-study material, not a confidential exam bank. Listening uses device speech synthesis.
 
@@ -43,16 +42,14 @@ Progress events are graded by the backend. Event UUID retries return the existin
 incrementing counters; changed reuse returns 409. SQL updates increment counters atomically.
 The UI waits for server confirmation, retains failed submissions for an explicit retry, and refreshes
 progress on focus. Network errors never appear as successful saves. Logout clears in-memory account data.
-Old browser-only progress is imported only after an explicit action explaining which account receives it.
-An import merges counters by maximum and keeps existing account status; retry cannot add counts twice.
-Local progress keys are kept for recovery. No private progress is put in localStorage.
+No private progress is put in localStorage.
 
 ## Pages
 - /practice: vocabulary cards/quizzes and mastery stats.
 - /listening: audible prompt + A/B/C, playback gate, transcript and review.
-- /library: searchable, paginated vocabulary with unit/part-of-speech filters.
+- /library: searchable, paginated vocabulary with unit/part-of-speech/unfamiliar filters and star toggles.
 - /login, /register: credentials, validation, session creation.
-- /progress: private summary, wrong answers, explicit legacy import.
+- /progress: private summary and wrong/starred review answers.
 - /*: not-found; shared loading/error/retry UI and session-expiry handling.
 Guests can browse and practice without saving; login is required for account progress.
 

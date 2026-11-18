@@ -18,8 +18,7 @@ Mutations require exact configured Origin + X-CSRF-Token. Bootstrap csrf first; 
 | GET /catalog/vocabulary | no | `{entries: Vocabulary[]}` | practice/library |
 | GET /catalog/listening | no | `{entries: Listening[]}` | listening |
 | GET /progress | yes | `{records: Progress[]}` for current user only | all practice/progress |
-| POST /progress/events | yes | StudyEvent -> `{correct,record}` | cards/quizzes/listening |
-| POST /progress/import | yes | LegacyImport -> `{imported,records}` | progress |
+| POST /progress/events | yes | StudyEvent -> `{correct,record}` | cards/quizzes/listening/library |
 
 User: `{id:UUID,email:string}`. Password length 12..128, email normalized/case-insensitive.
 Catalog preserves original shapes/IDs: vocabulary has id,word,senses[{pos,meaning}],example,
@@ -28,12 +27,7 @@ answer,explanation,keywords. Stable IDs are word-0001..word-1000 and listen-001.
 
 Progress: `{entry_id,category:"vocabulary"|"listening",status:"mastered"|"review"|"unseen",
 attempts:int,correct:int,updated_at}`. Cards affect status, quizzes/listening also increment counters.
-StudyEvent: `{event_id:UUID,entry_id,kind:"card"|"quiz"|"listening",rating?:"mastered"|"review",
+StudyEvent: `{event_id:UUID,entry_id,kind:"card"|"quiz"|"listening",rating?:"mastered"|"review"|"unseen",
 answer?:string}`. Card requires rating only, vocabulary quiz requires chosen vocabulary ID only,
 listening requires A/B/C only. Backend checks kind/item category and computes correctness.
 Same event_id + same content returns unchanged grading plus current progress; changed content ->409.
-
-LegacyImport: `{import_id:UUID,records:[{entry_id,status,attempts,correct}]}` (max 1,030 entries).
-Reject unknown/duplicate IDs and invalid counters. Only explicit user action sends local records.
-Merge counters with max (not addition), preserve existing account status, create missing records.
-Same import_id/content -> no changes; changed reuse ->409. Old browser keys remain intact.

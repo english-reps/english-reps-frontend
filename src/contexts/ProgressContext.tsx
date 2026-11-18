@@ -16,7 +16,6 @@ interface Data {
   error: string;
   refresh: () => Promise<void>;
   submit: (event: StudyEvent) => Promise<EventResult>;
-  importLegacy: (body: unknown) => Promise<void>;
 }
 const Context = createContext<Data | null>(null);
 export function ProgressProvider({ children }: { children: ReactNode }) {
@@ -82,16 +81,6 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     }));
     return result;
   }
-  async function importLegacy(body: unknown) {
-    const data = await request<{ records: Progress[] }>("/progress/import", {
-      method: "POST",
-      body,
-    });
-    if (owner && current.current === owner) {
-      revision.current++;
-      setSaved({ owner, records: data.records });
-    }
-  }
   return (
     <Context.Provider
       value={{
@@ -100,7 +89,6 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
         error,
         refresh,
         submit,
-        importLegacy,
       }}
     >
       {children}

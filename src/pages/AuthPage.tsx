@@ -64,9 +64,13 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
       </form>
       <p>
         {mode === "login" ? (
-          <Link to="/register">還沒有帳號？建立帳號</Link>
+          <Link to="/register" state={location.state}>
+            還沒有帳號？建立帳號
+          </Link>
         ) : (
-          <Link to="/login">已有帳號？登入</Link>
+          <Link to="/login" state={location.state}>
+            已有帳號？登入
+          </Link>
         )}
       </p>
       <p className="local-note">目前尚未提供密碼重設，請妥善保存密碼。</p>
