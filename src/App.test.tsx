@@ -105,10 +105,11 @@ it("protected progress routes to login, then returns to private progress and cle
   expect(
     screen.queryByRole("heading", { name: "匯入這個瀏覽器的舊進度" }),
   ).not.toBeInTheDocument();
-  expect(await screen.findByText(/單字 word-0001/)).toBeInTheDocument();
+  expect(await screen.findByText("company")).toBeInTheDocument();
+  expect(screen.getAllByText(/公司；陪伴/).length).toBeGreaterThan(0);
   fireEvent.click(screen.getByRole("button", { name: "登出" }));
   await screen.findByRole("heading", { name: "歡迎回來" });
-  expect(screen.queryByText(/單字 word-0001/)).not.toBeInTheDocument();
+  expect(screen.queryByText("company")).not.toBeInTheDocument();
 });
 it("a failed save stays retryable and resends exactly the same event ID", async () => {
   signedIn = true;
@@ -416,5 +417,35 @@ it("displays cold-start guidance and keeps guest listening usable when API gatew
   ).toBeInTheDocument();
   expect(
     await screen.findByText(/已改用內建離線聽力題庫/),
+  ).toBeInTheDocument();
+});
+it("progress review list shows word details directly and allows marking mastered or removing items", async () => {
+  signedIn = true;
+  open("/progress");
+  await screen.findByRole("heading", { name: "我的學習進度" });
+  expect(await screen.findByText("company")).toBeInTheDocument();
+  expect(screen.getAllByText(/公司；陪伴/).length).toBeGreaterThan(0);
+  expect(
+    screen.getByRole("button", { name: "聽 company 發音" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "從待複習移除 company" }),
+  ).toBeInTheDocument();
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "將 company 標記為已記住" }),
+  );
+  await waitFor(() =>
+    expect(screen.queryByText("company")).not.toBeInTheDocument(),
+  );
+  expect(events[0]).toMatchObject({
+    entry_id: "word-0001",
+    kind: "card",
+    rating: "mastered",
+  });
+  expect(
+    screen.getByText(
+      "先開始練習，或在單字庫點擊 ★ 標記不熟的題目，都會出現在這裡。",
+    ),
   ).toBeInTheDocument();
 });
