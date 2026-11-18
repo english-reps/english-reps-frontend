@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useProgress } from "../contexts/ProgressContext";
+import { SpeechPlayer } from "../domain/speech.js";
 import {
   choices,
+  createUuid,
   definition,
   shuffle,
   type StudyEvent,
@@ -45,6 +47,30 @@ export function PracticePage() {
   useEffect(() => {
     begin();
   }, [bank.entries, unit, review, quiz]); // Progress updates must not reshuffle an active round.
+  useEffect(() => {
+    if (
+      review &&
+      !progress.loading &&
+      session.length === 0 &&
+      bank.entries.length > 0
+    ) {
+      const hasReview = bank.entries.some(
+        (word) =>
+          (unit === "all" || word.unit === Number(unit)) &&
+          progress.records.some(
+            (row) => row.entry_id === word.id && row.status === "review",
+          ),
+      );
+      if (hasReview) begin();
+    }
+  }, [
+    review,
+    progress.loading,
+    progress.records,
+    bank.entries,
+    unit,
+    session.length,
+  ]);
   if (bank.loading) return <Loading />;
   if (bank.error)
     return <ErrorNotice message={bank.error} retry={bank.retry} />;
@@ -59,6 +85,12 @@ export function PracticePage() {
       </div>
       <div className="practice-layout">
         <div className="study-column">
+          {bank.offline && (
+            <ErrorNotice
+              message="目前無法連線到題庫伺服器，已改用內建離線單字庫。"
+              retry={bank.retry}
+            />
+          )}
           <div className="study-toolbar">
             <div className="mode-switch">
               <button
@@ -181,20 +213,27 @@ function WordExercise({
 }) {
   const { user } = useAuth();
   const progress = useProgress();
+  const player = useMemo(() => {
+    let synthesis, Utterance;
+    try {
+      synthesis = window.speechSynthesis;
+      Utterance = window.SpeechSynthesisUtterance;
+    } catch {}
+    return new SpeechPlayer({ synthesis, Utterance });
+  }, []);
   const [revealed, setRevealed] = useState(false),
     [options] = useState(() => choices(word, entries)),
     [answer, setAnswer] = useState<string | null>(null),
     [correct, setCorrect] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
+    [speechError, setSpeechError] = useState(""),
     [pending, setPending] = useState<StudyEvent | null>(null);
   useEffect(
     () => () => {
-      try {
-        window.speechSynthesis?.cancel();
-      } catch {}
+      player.stop();
     },
-    [],
+    [player],
   );
   async function save(event: StudyEvent) {
     if (busy || answer !== null) return;
@@ -219,14 +258,10 @@ function WordExercise({
     }
   }
   function speak() {
-    try {
-      const utterance = new SpeechSynthesisUtterance(word.word);
-      utterance.lang = "en-US";
-      window.speechSynthesis.cancel();
-      window.speechSynthesis.speak(utterance);
-    } catch {
-      setError("此瀏覽器無法播放英語語音。");
-    }
+    setSpeechError("");
+    player.play(word.word, {
+      onError: () => setSpeechError("此瀏覽器無法播放英語語音。"),
+    });
   }
   return (
     <div className="exercise-content">
@@ -242,6 +277,7 @@ function WordExercise({
           ♪ 發音
         </button>
       </div>
+      {speechError && <p role="alert">{speechError}</p>}
       <div className="word-center">
         <h2 className="main-word">{word.word}</h2>
         {!quiz && !revealed && (
@@ -262,7 +298,7 @@ function WordExercise({
               disabled={busy || answer !== null || !!pending}
               onClick={() =>
                 void save({
-                  event_id: crypto.randomUUID(),
+                  event_id: createUuid(),
                   entry_id: word.id,
                   kind: "quiz",
                   answer: option.id,
@@ -284,7 +320,7 @@ function WordExercise({
                 disabled={busy || answer !== null || !!pending}
                 onClick={() =>
                   void save({
-                    event_id: crypto.randomUUID(),
+                    event_id: createUuid(),
                     entry_id: word.id,
                     kind: "card",
                     rating: "review",
@@ -298,7 +334,7 @@ function WordExercise({
                 disabled={busy || answer !== null || !!pending}
                 onClick={() =>
                   void save({
-                    event_id: crypto.randomUUID(),
+                    event_id: createUuid(),
                     entry_id: word.id,
                     kind: "card",
                     rating: "mastered",

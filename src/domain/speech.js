@@ -1,10 +1,23 @@
+function pickEnglishVoice(voices = []) {
+  const english = voices.filter((voice) =>
+    /^en([-_]|$)/i.test(voice?.lang || ""),
+  );
+  const local = english.filter((voice) => voice.localService);
+  return (
+    local.find((voice) => /^en[-_]US$/i.test(voice.lang)) ||
+    local[0] ||
+    english.find((voice) => /^en[-_]US$/i.test(voice.lang)) ||
+    english[0]
+  );
+}
+
 // A generation counter makes callbacks from canceled audio harmless after navigation.
 export class SpeechPlayer {
   constructor({
     synthesis,
     Utterance,
-    setTimer = setTimeout,
-    clearTimer = clearTimeout,
+    setTimer = (callback, delay) => setTimeout(callback, delay),
+    clearTimer = (id) => clearTimeout(id),
   } = {}) {
     this.synthesis = synthesis;
     this.Utterance = Utterance;
@@ -13,6 +26,9 @@ export class SpeechPlayer {
     this.generation = 0;
     this.utterance = null;
     this.timer = null;
+    try {
+      this.synthesis?.getVoices?.();
+    } catch {}
   }
 
   get supported() {
@@ -24,17 +40,30 @@ export class SpeechPlayer {
 
   stop() {
     this.generation++;
-    this.clearTimer(this.timer);
+    const clear = this.clearTimer;
+    clear(this.timer);
     this.timer = null;
-    if (this.utterance) this.synthesis?.cancel();
+    const active = Boolean(
+      this.utterance ||
+        this.synthesis?.speaking ||
+        this.synthesis?.pending ||
+        this.synthesis?.paused,
+    );
     this.utterance = null;
+    if (active) {
+      try {
+        this.synthesis?.cancel?.();
+      } catch {}
+    }
   }
 
   play(
-    text,
+    input,
     {
       rate = 1,
+      pauseMs = 250,
       onState = () => {},
+      onStep = () => {},
       onComplete = () => {},
       onError = () => {},
     } = {},
@@ -44,7 +73,16 @@ export class SpeechPlayer {
       onError("unsupported");
       return;
     }
+    const segments = (Array.isArray(input) ? input : [input])
+      .map((part) => String(part ?? "").trim())
+      .filter(Boolean);
+    if (!segments.length) {
+      onComplete();
+      return;
+    }
     const generation = this.generation;
+    const schedule = this.setTimer;
+    const clear = this.clearTimer;
     let settled = false;
     const fail = (error) => {
       if (generation !== this.generation || settled) return;
@@ -52,37 +90,50 @@ export class SpeechPlayer {
       this.stop();
       onError(error);
     };
-    try {
-      const utterance = new this.Utterance(text);
-      this.utterance = utterance;
-      utterance.lang = "en-US";
-      utterance.rate = Math.min(1.25, Math.max(0.65, Number(rate) || 1));
-      const voices = this.synthesis.getVoices?.() || [];
-      const english = voices.filter((voice) => /^en[-_]/i.test(voice.lang));
-      const voice =
-        english.find((item) => /^en[-_]US$/i.test(item.lang)) || english[0];
-      if (voice) utterance.voice = voice;
-      utterance.onstart = () => {
-        if (generation !== this.generation || settled) return;
-        this.clearTimer(this.timer);
-        onState("playing");
-        // Some engines fail to send an end/error event; allow a clean retry.
-        this.timer = this.setTimer(() => fail("timeout"), 90000);
-      };
-      utterance.onend = () => {
-        if (generation !== this.generation || settled) return;
-        settled = true;
-        this.clearTimer(this.timer);
-        this.timer = null;
-        this.utterance = null;
-        onComplete();
-      };
-      utterance.onerror = (event) => fail(event.error || "speech-error");
-      onState("starting");
-      this.timer = this.setTimer(() => fail("not-started"), 12000);
-      this.synthesis.speak(utterance);
-    } catch {
-      fail("speech-error");
-    }
+    const speakAt = (index) => {
+      if (generation !== this.generation || settled) return;
+      try {
+        if (this.synthesis.paused) this.synthesis.resume?.();
+        const utterance = new this.Utterance(segments[index]);
+        this.utterance = utterance;
+        utterance.lang = "en-US";
+        utterance.rate = Math.min(1.25, Math.max(0.65, Number(rate) || 1));
+        const voices = this.synthesis.getVoices?.() || [];
+        const voice = pickEnglishVoice(voices);
+        if (voice) utterance.voice = voice;
+        utterance.onstart = () => {
+          if (generation !== this.generation || settled) return;
+          clear(this.timer);
+          onState("playing");
+          onStep(index, segments.length);
+          // Some engines fail to send an end/error event; allow a clean retry.
+          this.timer = schedule(() => fail("timeout"), 45000);
+        };
+        utterance.onend = () => {
+          if (generation !== this.generation || settled) return;
+          clear(this.timer);
+          this.timer = null;
+          this.utterance = null;
+          if (index + 1 < segments.length) {
+            if (pauseMs > 0) {
+              this.timer = schedule(() => speakAt(index + 1), pauseMs);
+            } else {
+              speakAt(index + 1);
+            }
+          } else {
+            settled = true;
+            onComplete();
+          }
+        };
+        utterance.onerror = (event) => fail(event?.error || "speech-error");
+        onState("starting");
+        onStep(index, segments.length);
+        this.timer = schedule(() => fail("not-started"), 12000);
+        this.synthesis.speak(utterance);
+      } catch {
+        fail("speech-error");
+      }
+    };
+    speakAt(0);
   }
 }

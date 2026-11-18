@@ -29,6 +29,12 @@ export function LibraryPage() {
           <p>1,000 個多益單字，隨時查找。</p>
         </div>
       </div>
+      {bank.offline && (
+        <ErrorNotice
+          message="目前無法連線到題庫伺服器，已改用內建離線單字庫。"
+          retry={bank.retry}
+        />
+      )}
       <div className="library-toolbar">
         <label>
           搜尋單字或中文

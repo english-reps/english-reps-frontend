@@ -2111,3 +2111,38 @@ a.nav-button {
     flex-direction: column;
   }
 }
+.listening-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #9f6139;
+}
+.listening-fallback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.listening-fallback-text {
+  margin: 18px 28px 0;
+  padding: 16px 20px;
+  background: #f4f5ee;
+  border-left: 2px solid #c6d1ba;
+  border-radius: 8px;
+  text-align: left;
+}
+.listening-fallback-text ul {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--ink);
+}
+@media (max-width: 760px) {
+  .listening-fallback-text {
+    margin: 16px 22px 0;
+    padding: 14px 16px;
+  }
+}

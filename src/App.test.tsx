@@ -8,6 +8,7 @@ import { resetCsrf } from "./services/api";
 let signedIn = false;
 let events: Record<string, unknown>[];
 let failSave = false;
+let failListeningCatalog = false;
 const user = { id: "owner-1", email: "learner@example.com" };
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -18,7 +19,12 @@ beforeEach(() => {
   signedIn = false;
   events = [];
   failSave = false;
+  failListeningCatalog = false;
   resetCsrf();
+  Object.defineProperty(window, "speechSynthesis", {
+    configurable: true,
+    value: undefined,
+  });
   vi.stubGlobal(
     "fetch",
     vi.fn(async (path: string, init?: RequestInit) => {
@@ -38,8 +44,11 @@ beforeEach(() => {
       }
       if (path.endsWith("/catalog/vocabulary"))
         return json({ entries: words.entries });
-      if (path.endsWith("/catalog/listening"))
+      if (path.endsWith("/catalog/listening")) {
+        if (failListeningCatalog)
+          return json({ error: { message: "unavailable" } }, 503);
         return json({ entries: listening.entries });
+      }
       if (path.endsWith("/progress/events")) {
         const body = JSON.parse(String(init?.body));
         events.push(body);
@@ -115,7 +124,7 @@ it("a failed save stays retryable and resends exactly the same event ID", async 
   expect(events).toHaveLength(2);
   expect(events[0].event_id).toBe(events[1].event_id);
 });
-it("listening navigation opens the real page, gates answers until audio ends and hides transcripts until answered", async () => {
+it("listening navigation opens the real page, plays 4 sequential segments, gates until end, and hides transcripts until answered", async () => {
   const utterances: SpeechSynthesisUtterance[] = [];
   vi.stubGlobal(
     "SpeechSynthesisUtterance",
@@ -144,15 +153,116 @@ it("listening navigation opens the real page, gates answers until audio ends and
   expect(option).toBeDisabled();
   fireEvent.click(play);
   expect(utterances).toHaveLength(1);
-  const question = listening.entries.find((row) =>
-    utterances[0].text.startsWith(row.prompt),
+  const question = listening.entries.find(
+    (row) => row.prompt === utterances[0].text,
   )!;
+  expect(question).toBeDefined();
   expect(screen.queryByText(question.prompt)).not.toBeInTheDocument();
-  utterances[0].onend?.(new Event("end") as SpeechSynthesisEvent);
+  for (let step = 0; step < 4; step++) {
+    await waitFor(() => expect(utterances).toHaveLength(step + 1));
+    expect(option).toBeDisabled();
+    utterances[step].onend?.(new Event("end") as SpeechSynthesisEvent);
+  }
   await waitFor(() => expect(option).toBeEnabled());
   fireEvent.click(option);
   expect(await screen.findByText(question.prompt)).toBeInTheDocument();
   expect(events).toHaveLength(0); // Guest practice never writes account data.
+});
+it("listening remains completable with English-only text fallback when speech errors or stops", async () => {
+  const utterances: SpeechSynthesisUtterance[] = [];
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      text: string;
+      constructor(text: string) {
+        this.text = text;
+      }
+    },
+  );
+  Object.defineProperty(window, "speechSynthesis", {
+    configurable: true,
+    value: {
+      speak: (utterance: SpeechSynthesisUtterance) =>
+        utterances.push(utterance),
+      cancel: vi.fn(),
+      getVoices: () => [],
+    },
+  });
+  open("/listening");
+  const play = await screen.findByRole("button", {
+    name: "▶ 播放題目與 A／B／C",
+  });
+  const optionB = screen.getByRole("button", { name: "B 回答 B" });
+  expect(optionB).toBeDisabled();
+  fireEvent.click(play);
+  expect(utterances).toHaveLength(1);
+  const question = listening.entries.find(
+    (row) => row.prompt === utterances[0].text,
+  )!;
+  // Simulate browser synthesis failure (e.g. cloud TTS network error).
+  utterances[0].onerror?.({ error: "network" } as SpeechSynthesisErrorEvent);
+  await waitFor(() => expect(optionB).toBeEnabled());
+  expect(screen.queryByText(question.prompt)).not.toBeInTheDocument();
+  expect(screen.queryByText(question.explanation)).not.toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "顯示題目與選項文字" }),
+  );
+  expect(screen.getByText(question.prompt)).toBeInTheDocument();
+  expect(screen.queryByText(question.promptZh)).not.toBeInTheDocument();
+  expect(screen.queryByText(question.explanation)).not.toBeInTheDocument();
+  fireEvent.click(optionB);
+  expect(await screen.findByText(question.explanation)).toBeInTheDocument();
+});
+it("listening auto-unlocks with text fallback on unsupported browsers and falls back to bundled data when catalog API fails", async () => {
+  failListeningCatalog = true;
+  open("/listening");
+  expect(
+    await screen.findByText(/已改用內建離線聽力題庫/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/此瀏覽器不支援語音播放/),
+  ).toBeInTheDocument();
+  const optionA = screen.getByRole("button", { name: "A 回答 A" });
+  expect(optionA).toBeEnabled();
+  const fallbackBox = screen.getByLabelText("題目與選項文字");
+  expect(fallbackBox).toBeInTheDocument();
+  fireEvent.click(optionA);
+  expect(await screen.findByText("逐字稿與中文")).toBeInTheDocument();
+});
+it("stopping listening playback early offers unlock and text fallback, and signed-in answers save to account", async () => {
+  signedIn = true;
+  const utterances: SpeechSynthesisUtterance[] = [];
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      text: string;
+      constructor(text: string) {
+        this.text = text;
+      }
+    },
+  );
+  Object.defineProperty(window, "speechSynthesis", {
+    configurable: true,
+    value: {
+      speak: (utterance: SpeechSynthesisUtterance) =>
+        utterances.push(utterance),
+      cancel: vi.fn(),
+      getVoices: () => [],
+    },
+  });
+  open("/listening");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "▶ 播放題目與 A／B／C" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "■ 停止播放" }));
+  const optionC = screen.getByRole("button", { name: "C 回答 C" });
+  expect(optionC).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "直接選擇 A／B／C" }));
+  expect(optionC).toBeEnabled();
+  fireEvent.click(optionC);
+  await screen.findByText("已儲存到你的帳號。");
+  expect(events).toHaveLength(1);
+  expect(events[0]).toMatchObject({ kind: "listening", answer: "C" });
 });
 it("library search finds English and Chinese and supports direct routes", async () => {
   open("/library");

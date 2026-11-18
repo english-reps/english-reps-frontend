@@ -2,16 +2,18 @@ export class SpeechPlayer {
   constructor(options?: {
     synthesis?: SpeechSynthesis;
     Utterance?: typeof SpeechSynthesisUtterance;
-    setTimer?: typeof setTimeout;
-    clearTimer?: typeof clearTimeout;
+    setTimer?: (callback: () => void, delay?: number) => unknown;
+    clearTimer?: (id: unknown) => void;
   });
   readonly supported: boolean;
   stop(): void;
   play(
-    text: string,
+    input: string | string[],
     options?: {
       rate?: number;
+      pauseMs?: number;
       onState?: (state: string) => void;
+      onStep?: (index: number, total: number) => void;
       onComplete?: () => void;
       onError?: (error: string) => void;
     },
