@@ -65,5 +65,9 @@ it("handles empty logout responses and malformed server pages", async () => {
   await expect(
     request("/auth/logout", { method: "POST" }),
   ).resolves.toBeUndefined();
-  await expect(request("/catalog/listening")).rejects.toBeInstanceOf(ApiError);
+  await expect(request("/catalog/listening")).rejects.toMatchObject({
+    status: 502,
+    code: "upstream_unavailable",
+    message: expect.stringContaining("HTTP 502"),
+  });
 });

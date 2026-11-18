@@ -8,7 +8,7 @@ import { ListeningPage } from "./pages/ListeningPage";
 import { LibraryPage } from "./pages/LibraryPage";
 import { ProgressPage } from "./pages/ProgressPage";
 import { ErrorNotice, Loading } from "./components/Common";
-import { errorMessage, request } from "./services/api";
+import { ApiError, errorMessage, request } from "./services/api";
 class ErrorBoundary extends Component<
   { children: ReactNode },
   { failed: boolean }
@@ -42,8 +42,16 @@ function Layout() {
     const controller = new AbortController();
     request("/health/ready", { signal: controller.signal })
       .then(() => setHealth("服務已連線"))
-      .catch(() => {
-        if (!controller.signal.aborted) setHealth("服務暫時無法連線");
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        const waking =
+          error instanceof ApiError &&
+          (error.status === 502 ||
+            error.status === 503 ||
+            error.status === 504);
+        setHealth(
+          waking ? `後端喚醒中或暫時無回應（${error.status}）` : "服務暫時無法連線",
+        );
       });
     return () => controller.abort();
   }, []);

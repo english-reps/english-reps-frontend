@@ -292,3 +292,28 @@ it("legacy import requires explicit acknowledgement and leaves browser data inta
   await screen.findByText("已匯入到目前帳號。原本的瀏覽器紀錄保留。");
   expect(localStorage.getItem("english-reps.progress.v1")).toBe(original);
 });
+it("displays cold-start guidance and keeps guest listening usable when API gateway returns 502", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string) => {
+      if (
+        path.endsWith("/health/ready") ||
+        path.endsWith("/auth/me") ||
+        path.endsWith("/catalog/listening")
+      ) {
+        return new Response("<html>502 Bad Gateway</html>", { status: 502 });
+      }
+      throw new Error(`Unexpected request ${path}`);
+    }),
+  );
+  open("/listening");
+  expect(
+    await screen.findByText(/帳號服務正在喚醒或暫時無回應（HTTP 502）/),
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByText(/後端喚醒中或暫時無回應（502）/),
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByText(/已改用內建離線聽力題庫/),
+  ).toBeInTheDocument();
+});

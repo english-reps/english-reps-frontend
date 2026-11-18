@@ -32,6 +32,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(await request<User>("/auth/me"));
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) setUser(null);
+      else if (
+        error instanceof ApiError &&
+        (error.status === 502 || error.status === 503 || error.status === 504)
+      )
+        setError(
+          `帳號服務正在喚醒或暫時無回應（HTTP ${error.status}），可先訪客練習或稍候重試。`,
+        );
       else setError("帳號服務暫時無法連線。");
     } finally {
       setLoading(false);
