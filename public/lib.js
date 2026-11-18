@@ -36,9 +36,9 @@ export function makeQuestion(entry, entries, random = Math.random) {
   return shuffle([{ id: entry.id, meaning: correct }, ...distractors], random);
 }
 
-export function loadProgress(storage, validIds) {
+export function loadProgress(storage, validIds, storageKey = STORAGE_KEY) {
   try {
-    const data = JSON.parse(storage.getItem(STORAGE_KEY) || '{}');
+    const data = JSON.parse(storage.getItem(storageKey) || '{}');
     if (!data || data.version !== 1 || !data.records || typeof data.records !== 'object') return {};
     const records = {};
     for (const [id, record] of Object.entries(data.records)) {

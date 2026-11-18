@@ -1,8 +1,14 @@
 import { STORAGE_KEY, SESSION_SIZE, definition, shuffle, filterEntries, makeQuestion, loadProgress, recordResult, progressStats } from './lib.js';
+import { ListeningPractice } from './listening.js';
 
 const $ = selector => document.querySelector(selector);
-const state = { entries: [], records: {}, view: 'practice', mode: 'cards', session: [], index: 0, revealed: false, answer: null, options: [], results: [], page: 1 };
+const state = { entries: [], records: {}, view: 'practice', vocabularyStatus: 'loading', mode: 'cards', session: [], index: 0, revealed: false, answer: null, options: [], results: [], page: 1 };
 const PAGE_SIZE = 30;
+let listening;
+function getListening() {
+  listening ??= new ListeningPractice($('#listening-view'), () => { $('#storage-notice').hidden = false; });
+  return listening;
+}
 const node = (tag, className, text) => {
   const result = document.createElement(tag);
   if (className) result.className = className;
@@ -231,18 +237,37 @@ function renderSummary(root) {
 }
 
 function setView(view) {
+  if (state.view !== view) {
+    try {
+      listening?.leave();
+      window.speechSynthesis?.cancel();
+    } catch (error) {
+      console.warn('Unable to stop speech while navigating:', error);
+    }
+  }
   state.view = view;
-  $('#practice-view').hidden = view !== 'practice';
-  $('#library-view').hidden = view !== 'library';
-  for (const name of ['practice', 'library']) {
+  $('#practice-view').hidden = view !== 'practice' || state.vocabularyStatus !== 'ready';
+  $('#library-view').hidden = view !== 'library' || state.vocabularyStatus !== 'ready';
+  $('#listening-view').hidden = view !== 'listening';
+  $('#loading').hidden = view === 'listening' || state.vocabularyStatus !== 'loading';
+  $('#error').hidden = view === 'listening' || state.vocabularyStatus !== 'error';
+  for (const name of ['practice', 'library', 'listening']) {
     const control = $(`#nav-${name}`);
     control.classList.toggle('active', name === view);
     if (name === view) control.setAttribute('aria-current', 'page');
     else control.removeAttribute('aria-current');
   }
-  $('#page-title').replaceChildren(document.createTextNode(view === 'practice' ? '把單字，練成直覺' : '你的英文，從這裡累積'), node('span', '', '。'));
-  $('#page-description').textContent = view === 'practice' ? '不用一次記住全部。今天，就從 10 個單字開始。' : '1,000 個單字、中英例句。隨時查找，把不熟的字留下來。';
-  if (view === 'library') renderLibrary();
+  const headings = {
+    practice: ['把單字，練成直覺', '不用一次記住全部。今天，就從 10 個單字開始。'],
+    library: ['你的英文，從這裡累積', '1,000 個單字、中英例句。隨時查找，把不熟的字留下來。'],
+    listening: ['把英文，聽進日常', '從一句問句開始。每次 10 題，練出聽懂的直覺。'],
+  };
+  $('#page-title').replaceChildren(document.createTextNode(headings[view][0]), node('span', '', '。'));
+  $('#page-description').textContent = headings[view][1];
+  $('#edition-count').textContent = view === 'listening' ? '30' : '1,000';
+  $('#edition-label').textContent = view === 'listening' ? 'ORIGINAL LISTENING QUESTIONS' : 'WORDS TO GO FURTHER';
+  if (view === 'library' && state.vocabularyStatus === 'ready') renderLibrary();
+  if (view === 'listening') getListening().enter();
 }
 
 function renderLibrary() {
@@ -310,8 +335,6 @@ function setup() {
   const parts = [...new Set(state.entries.flatMap(entry => entry.senses.map(sense => sense.pos)))];
   const labels = { 'n.': '名詞', 'v.': '動詞', 'adj.': '形容詞', 'adv.': '副詞', 'prep.': '介系詞', 'conj.': '連接詞', 'pron.': '代名詞', 'phr.': '片語' };
   for (const part of parts) $('#pos-filter').append(new Option(`${part} ${labels[part] || ''}`, part));
-  $('#nav-practice').addEventListener('click', () => setView('practice'));
-  $('#nav-library').addEventListener('click', () => setView('library'));
   for (const mode of ['cards', 'quiz']) $(`#mode-${mode}`).addEventListener('click', () => {
     if (state.mode === mode) return;
     state.mode = mode;
@@ -352,14 +375,27 @@ async function init() {
       $('#storage-notice').hidden = false;
     }
     setup();
-    $('#loading').hidden = true;
-    $('#app').hidden = false;
+    state.vocabularyStatus = 'ready';
+    setView(state.view);
   } catch (error) {
     console.error('Unable to initialize English Reps:', error);
-    $('#loading').hidden = true;
-    $('#error').hidden = false;
+    state.vocabularyStatus = 'error';
+    setView(state.view);
   }
 }
 
 $('#retry-load').addEventListener('click', () => window.location.reload());
+const viewFromHash = () => {
+  const view = window.location.hash.slice(1);
+  return ['practice', 'library', 'listening'].includes(view) ? view : 'practice';
+};
+for (const view of ['practice', 'library', 'listening']) {
+  $(`#nav-${view}`).addEventListener('click', () => {
+    window.history.replaceState(null, '', `#${view}`);
+    setView(view);
+  });
+}
+window.addEventListener('hashchange', () => setView(viewFromHash()));
+$('#app').hidden = false;
+setView(viewFromHash());
 init();
