@@ -41,7 +41,7 @@ npm test
 npm run build
 ```
 
-`npm run build` emits `dist/` with hashed assets. `nginx.conf` handles direct SPA routes,
+`npm run build` emits `dist/` with hashed assets. `docker/default.conf.template` handles direct SPA routes,
 `/api` proxying, immutable assets, uncached HTML, private API no-store and security headers.
 Dockerfile stages: `development` (Vite), `build`, `production` (Nginx).
 If the environment uses a corporate HTTPS proxy, pass its trusted CA as an optional BuildKit
@@ -86,3 +86,10 @@ Merge in order and retarget each dependent MR; `master` remains formal releases 
 integration. No automatic public deployment is configured.
 
 See [architecture](docs/architecture.md) and [API contract](docs/api-contract.md), mirrored in the backend.
+
+## Render staging deployment
+
+See [Render staging guide](docs/render-staging.md) for hosted HTTPS URLs without renting a server.
+The backend repo owns `render.yaml`; both services follow `develop` after CI passes.
+This requires a Render account and GitHub repository authorization; a committed YAML file alone
+does not create a running site. The free PostgreSQL database expires after 30 days.
