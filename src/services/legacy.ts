@@ -1,4 +1,4 @@
-import type { Status } from "../domain/types";
+import { createUuid, type Status } from "../domain/types";
 export interface LegacyImport {
   import_id: string;
   records: {
@@ -62,7 +62,7 @@ export function legacyImport(
     existing.fingerprint === fingerprint &&
     typeof existing.import_id === "string"
       ? existing.import_id
-      : crypto.randomUUID();
+      : createUuid();
   storage.setItem(key, JSON.stringify({ fingerprint, import_id }));
   return { import_id, records };
 }
