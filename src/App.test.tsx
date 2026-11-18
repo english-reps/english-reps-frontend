@@ -297,6 +297,14 @@ it("allows immediate one-click switch to English text while audio is stuck start
 it("library search finds English and Chinese and supports direct routes", async () => {
   open("/library");
   await screen.findByText("找到 1,000 個單字");
+  const companyRow = screen.getByText("company").closest("summary");
+  expect(companyRow?.querySelector(".list-number")).toHaveTextContent("0001");
+  expect(companyRow?.querySelector(".list-word")).toHaveTextContent("company");
+  expect(companyRow?.querySelector(".list-pos")).toHaveTextContent("n.");
+  expect(companyRow?.querySelector(".list-meaning")).toHaveTextContent(
+    "公司；陪伴",
+  );
+  expect(companyRow?.querySelector(".expand-icon")).toHaveTextContent("+");
   fireEvent.change(screen.getByLabelText("搜尋單字或中文"), {
     target: { value: "乘客" },
   });
