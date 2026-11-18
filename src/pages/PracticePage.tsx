@@ -23,7 +23,7 @@ export function PracticePage() {
   const [unit, setUnit] = useState("all"),
     [review, setReview] = useState(false),
     [quiz, setQuiz] = useState(false),
-    [session, setSession] = useState<Word[]>([]),
+    [session, setSession] = useState<Word[] | null>(null),
     [index, setIndex] = useState(0),
     [score, setScore] = useState(0);
   function begin(only?: Word[]) {
@@ -45,12 +45,15 @@ export function PracticePage() {
     setScore(0);
   }
   useEffect(() => {
+    if (bank.loading || bank.error) return;
     begin();
-  }, [bank.entries, unit, review, quiz]); // Progress updates must not reshuffle an active round.
+  }, [bank.loading, bank.error, bank.entries, unit, review, quiz]); // Progress updates must not reshuffle an active round.
   useEffect(() => {
     if (
+      !bank.loading &&
       review &&
       !progress.loading &&
+      session !== null &&
       session.length === 0 &&
       bank.entries.length > 0
     ) {
@@ -64,16 +67,18 @@ export function PracticePage() {
       if (hasReview) begin();
     }
   }, [
+    bank.loading,
     review,
     progress.loading,
     progress.records,
     bank.entries,
     unit,
-    session.length,
+    session?.length,
   ]);
   if (bank.loading) return <Loading />;
   if (bank.error)
     return <ErrorNotice message={bank.error} retry={bank.retry} />;
+  if (session === null) return <Loading />;
   return (
     <>
       <div className="page-heading">
