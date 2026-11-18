@@ -58,9 +58,9 @@ beforeEach(() => {
           record: {
             entry_id: body.entry_id,
             category: body.kind === "listening" ? "listening" : "vocabulary",
-            status: "mastered",
-            attempts: 1,
-            correct: 1,
+            status: body.kind === "card" ? body.rating : "mastered",
+            attempts: body.kind === "card" ? 0 : 1,
+            correct: body.kind === "card" ? 0 : 1,
             updated_at: new Date().toISOString(),
           },
         });
@@ -80,7 +80,6 @@ beforeEach(() => {
               ]
             : [],
         });
-      if (path.endsWith("/progress/import")) return json({ records: [] });
       throw new Error(`Unexpected request ${path}`);
     }),
   );
@@ -103,6 +102,9 @@ it("protected progress routes to login, then returns to private progress and cle
   });
   fireEvent.click(screen.getByRole("button", { name: "登入" }));
   await screen.findByRole("heading", { name: "我的學習進度" });
+  expect(
+    screen.queryByRole("heading", { name: "匯入這個瀏覽器的舊進度" }),
+  ).not.toBeInTheDocument();
   expect(await screen.findByText(/單字 word-0001/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "登出" }));
   await screen.findByRole("heading", { name: "歡迎回來" });
@@ -313,22 +315,83 @@ it("library search finds English and Chinese and supports direct routes", async 
     screen.queryByText("company", { exact: true }),
   ).not.toBeInTheDocument();
 });
-it("legacy import requires explicit acknowledgement and leaves browser data intact", async () => {
+it("library star button toggles review/unseen progress, filters starred words, and retries failed saves", async () => {
   signedIn = true;
-  const original = JSON.stringify({
-    version: 1,
-    records: { "word-0001": { status: "mastered", attempts: 3, correct: 2 } },
+  open("/library");
+  await screen.findByText("找到 1,000 個單字");
+  const companyStar = await screen.findByRole("button", {
+    name: "取消標記 company 為不熟",
   });
-  localStorage.setItem("english-reps.progress.v1", original);
-  open("/progress");
-  const button = await screen.findByRole("button", { name: "匯入到目前帳號" });
-  expect(button).toBeDisabled();
-  fireEvent.click(
-    screen.getByRole("checkbox", { name: "我確認這些是我的學習紀錄" }),
+  expect(companyStar).toHaveAttribute("aria-pressed", "true");
+  expect(companyStar).toHaveTextContent("★");
+
+  const passengerStar = screen.getByRole("button", {
+    name: "標記 passenger 為不熟",
+  });
+  expect(passengerStar).toHaveAttribute("aria-pressed", "false");
+  expect(passengerStar).toHaveTextContent("☆");
+  fireEvent.click(passengerStar);
+
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "取消標記 passenger 為不熟" }),
+    ).toHaveAttribute("aria-pressed", "true"),
   );
-  fireEvent.click(button);
-  await screen.findByText("已匯入到目前帳號。原本的瀏覽器紀錄保留。");
-  expect(localStorage.getItem("english-reps.progress.v1")).toBe(original);
+  expect(events[0]).toMatchObject({
+    entry_id: "word-0002",
+    kind: "card",
+    rating: "review",
+  });
+
+  fireEvent.click(screen.getByRole("checkbox", { name: /只看星號單字/ }));
+  expect(await screen.findByText("找到 2 個單字")).toBeInTheDocument();
+
+  failSave = true;
+  fireEvent.click(
+    screen.getByRole("button", { name: "取消標記 company 為不熟" }),
+  );
+  const retryButton = await screen.findByRole("button", { name: "重試" });
+  expect(screen.getByText(/尚未確認儲存/)).toBeInTheDocument();
+  expect(events).toHaveLength(2);
+  expect(events[1]).toMatchObject({
+    entry_id: "word-0001",
+    kind: "card",
+    rating: "unseen",
+  });
+
+  failSave = false;
+  fireEvent.click(retryButton);
+  expect(await screen.findByText("找到 1 個單字")).toBeInTheDocument();
+  expect(events).toHaveLength(3);
+  expect(events[2].event_id).toBe(events[1].event_id);
+  expect(screen.getByText("passenger")).toBeInTheDocument();
+  expect(
+    screen.queryByText("company", { exact: true }),
+  ).not.toBeInTheDocument();
+});
+it("guest clicking star in library prompts login and returns to library after signing in", async () => {
+  open("/library");
+  await screen.findByText("找到 1,000 個單字");
+  fireEvent.click(
+    screen.getByRole("button", { name: "標記 company 為不熟" }),
+  );
+  expect(events).toHaveLength(0);
+  expect(
+    await screen.findByText(/請先登入帳號，才能將不熟的單字存進資料庫/),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("link", { name: "前往登入 / 註冊" }));
+  await screen.findByRole("heading", { name: "歡迎回來" });
+  fireEvent.change(screen.getByLabelText("電子信箱"), {
+    target: { value: user.email },
+  });
+  fireEvent.change(screen.getByLabelText("密碼（12～128 字元）"), {
+    target: { value: "a-long-test-password" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "登入" }));
+  await screen.findByRole("heading", { name: "單字庫" });
+  expect(
+    await screen.findByRole("button", { name: "取消標記 company 為不熟" }),
+  ).toHaveTextContent("★");
 });
 it("displays cold-start guidance and keeps guest listening usable when API gateway returns 502", async () => {
   vi.stubGlobal(
