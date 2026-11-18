@@ -1,6 +1,6 @@
 """Import the supplied vocabulary PDF's `pdftotext -layout` output.
 
-Usage: python scripts/import-vocabulary.py extracted.txt public/data/vocabulary.json
+Usage: python scripts/import-vocabulary.py extracted.txt data/vocabulary.json
 Requires Python 3; extracting the PDF requires Poppler's pdftotext.
 """
 import json
