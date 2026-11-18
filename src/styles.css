@@ -2166,6 +2166,83 @@ a.nav-button {
   padding: 28px;
   margin: 24px 0;
 }
+.review-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.review-list-subtitle {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.review-count-badge {
+  background: var(--green-light);
+  color: var(--green);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.review-empty-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.review-list {
+  margin-top: 12px;
+}
+.review-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+.review-item-row + .review-item-row {
+  border-top: 1px solid #edf0e5;
+}
+.review-item-details .word-row-summary {
+  padding: 20px 16px 20px 22px;
+}
+.review-item-details .word-row-content {
+  padding: 0 22px 20px;
+}
+.review-listening-prompt {
+  font-size: 17px;
+  line-height: 1.45;
+}
+.review-item-meta {
+  color: #939f85;
+  font-size: 11px;
+}
+.review-detail-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 14px;
+}
+.review-listening-transcript {
+  margin-top: 14px;
+}
+.review-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 19px 20px 19px 8px;
+}
+.review-item-fallback {
+  align-items: center;
+  padding-left: 22px;
+}
+.review-fallback-title {
+  padding: 20px 0;
+  font-size: 13px;
+}
 .site-footer {
   max-width: 1200px;
   margin: 48px auto 24px;
@@ -2210,6 +2287,28 @@ a.nav-button {
   }
   .library-toolbar .library-star-filter {
     align-self: stretch;
+  }
+  .progress-detail-panel {
+    padding: 20px 16px;
+  }
+  .review-item-row {
+    grid-template-columns: 1fr;
+  }
+  .review-item-details .word-row-summary {
+    padding: 16px 14px;
+  }
+  .review-item-details .word-row-content {
+    padding: 0 14px 14px;
+  }
+  .review-listening-prompt {
+    font-size: 14px;
+  }
+  .review-row-actions {
+    justify-content: flex-end;
+    padding: 0 14px 14px;
+  }
+  .review-item-fallback {
+    padding-left: 14px;
   }
 }
 .listening-error {
