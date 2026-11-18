@@ -50,9 +50,16 @@ export async function request<T>(
   try {
     data = await response.json();
   } catch {
+    const gatewayStatus =
+      response.status === 502 ||
+      response.status === 503 ||
+      response.status === 504;
     throw new ApiError(
       response.status || 502,
-      "服務回應無法讀取，請稍後重試。",
+      gatewayStatus
+        ? `後端服務正在喚醒或暫時無回應（HTTP ${response.status}），請稍候幾秒重試。`
+        : "服務回應無法讀取，請稍後重試。",
+      gatewayStatus ? "upstream_unavailable" : "request_failed",
     );
   }
   if (!response.ok) {
