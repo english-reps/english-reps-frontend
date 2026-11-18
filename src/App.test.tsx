@@ -219,6 +219,7 @@ it("listening auto-unlocks with text fallback on unsupported browsers and falls 
   expect(
     await screen.findByText(/已改用內建離線聽力題庫/),
   ).toBeInTheDocument();
+  expect(screen.queryByText("目前沒有符合的題目")).not.toBeInTheDocument();
   expect(
     screen.getByText(/此瀏覽器不支援語音播放/),
   ).toBeInTheDocument();
@@ -263,6 +264,35 @@ it("stopping listening playback early offers unlock and text fallback, and signe
   await screen.findByText("已儲存到你的帳號。");
   expect(events).toHaveLength(1);
   expect(events[0]).toMatchObject({ kind: "listening", answer: "C" });
+});
+it("allows immediate one-click switch to English text while audio is stuck starting", async () => {
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      text: string;
+      constructor(text: string) {
+        this.text = text;
+      }
+    },
+  );
+  Object.defineProperty(window, "speechSynthesis", {
+    configurable: true,
+    value: {
+      speak: vi.fn(),
+      cancel: vi.fn(),
+      getVoices: () => [],
+    },
+  });
+  open("/listening");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "▶ 播放題目與 A／B／C" }),
+  );
+  const escape = screen.getByRole("button", {
+    name: "沒聽到聲音？停止並改看文字作答",
+  });
+  fireEvent.click(escape);
+  expect(screen.getByLabelText("題目與選項文字")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "A 回答 A" })).toBeEnabled();
 });
 it("library search finds English and Chinese and supports direct routes", async () => {
   open("/library");

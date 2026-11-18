@@ -38,7 +38,7 @@ export function ListeningPage() {
   const [topic, setTopic] = useState("all"),
     [review, setReview] = useState(false),
     [rate, setRate] = useState(1),
-    [session, setSession] = useState<Listening[]>([]),
+    [session, setSession] = useState<Listening[] | null>(null),
     [index, setIndex] = useState(0),
     [results, setResults] = useState<{ id: string; correct: boolean }[]>([]);
   function begin(items?: Listening[]) {
@@ -61,12 +61,15 @@ export function ListeningPage() {
     setResults([]);
   }
   useEffect(() => {
+    if (bank.loading || bank.error) return;
     begin();
-  }, [bank.entries, topic, review]);
+  }, [bank.loading, bank.error, bank.entries, topic, review]);
   useEffect(() => {
     if (
+      !bank.loading &&
       review &&
       !progress.loading &&
+      session !== null &&
       session.length === 0 &&
       bank.entries.length > 0
     ) {
@@ -81,16 +84,18 @@ export function ListeningPage() {
       if (hasReview) begin();
     }
   }, [
+    bank.loading,
     review,
     progress.loading,
     progress.records,
     bank.entries,
     topic,
-    session.length,
+    session?.length,
   ]);
   if (bank.loading) return <Loading />;
   if (bank.error)
     return <ErrorNotice message={bank.error} retry={bank.retry} />;
+  if (session === null) return <Loading />;
   const reviewCount = progress.records.filter(
     (record) =>
       record.category === "listening" && record.status === "review",
@@ -393,9 +398,24 @@ function ListeningExercise({
             {speechError}
           </p>
         )}
-        {answer === null && !playing && player.supported && (
+        {answer === null && player.supported && (
           <div className="listening-fallback-actions">
-            {speechError || attempted || showText ? (
+            {playing ? (
+              !canAnswer && (
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() => {
+                    player.stop();
+                    setPlaying(false);
+                    setPlayState("");
+                    setShowText(true);
+                  }}
+                >
+                  沒聽到聲音？停止並改看文字作答
+                </button>
+              )
+            ) : speechError || attempted || showText ? (
               <>
                 <button
                   type="button"
