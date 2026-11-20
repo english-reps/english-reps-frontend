@@ -85,7 +85,10 @@ export function LibraryPage() {
         <div>
           <p className="eyebrow">YOUR WORD COLLECTION</p>
           <h1>單字庫</h1>
-          <p>1,000 個多益單字，隨時查找，也能按星號存下不熟的單字。</p>
+          <p>
+            {bank.entries.length.toLocaleString()}{" "}
+            個多益單字，隨時查找，也能按星號存下不熟的單字。
+          </p>
         </div>
       </div>
       {bank.offline && (
@@ -116,11 +119,13 @@ export function LibraryPage() {
             }}
           >
             <option value="all">全部單元</option>
-            {Array.from({ length: 20 }, (_, i) => (
-              <option key={i} value={i + 1}>
-                單元 {i + 1}
-              </option>
-            ))}
+            {[...new Set(bank.entries.map((word) => word.unit))]
+              .sort((a, b) => a - b)
+              .map((item) => (
+                <option key={item} value={item}>
+                  單元 {item}
+                </option>
+              ))}
           </select>
         </label>
         <label>

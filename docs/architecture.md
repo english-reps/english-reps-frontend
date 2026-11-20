@@ -25,10 +25,10 @@ Same-origin cookies and explicit Origin checks; no CORS middleware is needed.
 ## Data and privacy
 - users: UUID, normalized unique email, Argon2 password hash, creation time.
 - sessions: hashed opaque token, user FK, hashed CSRF token, expiry. Raw tokens are cookies only.
-- catalog_items: stable original word/listen IDs, category, JSON content; public, seeded by first migration.
+- catalog files (`data/vocabulary.json`, `data/listening.json` in backend): stable word/listening IDs and content loaded and validated in memory by the API.
 - study_events: user + client event UUID, canonical request and server-graded result; immutable, idempotent.
 - progress: user + item, status, quiz attempts/correct count, updated time.
-User -> many sessions/events/progress; catalog item -> many users' events/progress.
+User -> many sessions/events/progress; PostgreSQL stores only user accounts, sessions, auth rate limits and learning progress.
 Every private query uses the authenticated user ID from the server, never a client-supplied owner.
 Catalog is self-study material, not a confidential exam bank. Listening uses device speech synthesis.
 

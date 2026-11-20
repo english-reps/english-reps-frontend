@@ -68,9 +68,10 @@ Questions are original self-study material, not ETS official items or confidenti
 
 ## Data, checks and integration
 
-`data/vocabulary.json` and `data/listening.js` preserve the old catalog as test/source fixtures;
-application pages load the catalog from the API, whose immutable first migration seeds it. Do not
-change stable IDs. `scripts/import-vocabulary.py` can regenerate the vocabulary fixture from PDF text.
+`data/vocabulary.json` and `data/listening.js` preserve the bundled offline fallback and test fixtures;
+application pages load the live catalog from the backend API, which reads `data/vocabulary.json` and
+`data/listening.json` from the backend repository. Do not change stable IDs. `scripts/import-vocabulary.py`
+can regenerate the vocabulary fixture from PDF text.
 Vitest/Testing Library tests cover routing/login/logout, privacy cleanup, failed-save retries,
 listening playback gating, library star toggling/filtering, catalog completeness, quiz choices, and API errors/CSRF.
 GitHub Actions checks TypeScript, tests and the production build; recommended required check:

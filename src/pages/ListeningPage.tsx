@@ -106,7 +106,10 @@ export function ListeningPage() {
         <div>
           <p className="eyebrow">LISTEN A LITTLE EVERY DAY</p>
           <h1>讓英文，聽進日常。</h1>
-          <p>30 題自編應答練習，先聽，再回答。</p>
+          <p>
+            {bank.entries.length.toLocaleString()}{" "}
+            題自編應答練習，先聽，再回答。
+          </p>
         </div>
       </div>
       <div className="practice-layout">
@@ -133,10 +136,17 @@ export function ListeningPage() {
             <label>
               練習主題
               <select value={topic} onChange={(e) => setTopic(e.target.value)}>
-                <option value="all">全部主題 · 30 題</option>
-                {Object.entries(topics).map(([key, label]) => (
+                <option value="all">
+                  全部主題 · {bank.entries.length.toLocaleString()} 題
+                </option>
+                {[
+                  ...new Set([
+                    ...Object.keys(topics),
+                    ...bank.entries.map((row) => row.topic),
+                  ]),
+                ].map((key) => (
                   <option key={key} value={key}>
-                    {label}
+                    {topics[key] || key}
                   </option>
                 ))}
               </select>
@@ -237,7 +247,7 @@ export function ListeningPage() {
             自編練習，非 ETS 官方題目；使用裝置的英語合成語音。
           </p>
         </div>
-        <ProgressPanel category="listening" />
+        <ProgressPanel category="listening" total={bank.entries.length} />
       </div>
     </>
   );
@@ -366,7 +376,7 @@ function ListeningExercise({
     <div className="exercise-content">
       <div className="word-heading">
         <span className="word-number">
-          {question.id.toUpperCase()} · {topics[question.topic]}
+          {question.id.toUpperCase()} · {topics[question.topic] || question.topic}
         </span>
         <span className="listening-type">自編應答題</span>
       </div>
