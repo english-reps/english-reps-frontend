@@ -2,6 +2,12 @@ map $uri $cache_policy {
     default "no-cache";
     ~^/assets/ "public, max-age=31536000, immutable";
     ~^/api/ "no-store";
+    "/api-wake-config.json" "no-store";
+}
+map $http_x_forwarded_proto $forwarded_proto {
+    default $scheme;
+    https https;
+    http http;
 }
 server {
     listen ${PORT};
@@ -14,8 +20,13 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
     add_header X-Frame-Options DENY always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ${CSP_CONNECT_SRC}; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'" always;
     location = /healthz { access_log off; return 200 'ok'; default_type text/plain; }
+    location = /api-wake-config.json {
+        access_log off;
+        default_type application/json;
+        return 200 '{"wake_url":"${API_WAKE_URL}"}';
+    }
     location /api/ {
         proxy_pass ${API_UPSTREAM};
         proxy_hide_header Cache-Control;
@@ -27,15 +38,24 @@ server {
         proxy_read_timeout 120s;
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
-        proxy_next_upstream error timeout http_502 http_503 http_504;
-        proxy_next_upstream_tries 3;
+        proxy_next_upstream error timeout;
+        proxy_next_upstream_tries 2;
         proxy_buffer_size 16k;
         proxy_buffers 8 16k;
         proxy_busy_buffers_size 32k;
+        proxy_set_header Rndr-Id "";
+        proxy_set_header Render-Proxy-Ttl "";
+        proxy_set_header Cdn-Loop "";
+        proxy_set_header Cf-Ray "";
+        proxy_set_header Cf-Connecting-Ip "";
+        proxy_set_header Cf-Ipcountry "";
+        proxy_set_header Cf-Visitor "";
+        proxy_set_header True-Client-Ip "";
+        proxy_set_header X-Request-Start "";
         proxy_set_header X-Request-ID $request_id;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $remote_addr;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
     }
     location /assets/ { try_files $uri =404; }
     location / { try_files $uri $uri/ /index.html; }

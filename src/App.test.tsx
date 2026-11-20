@@ -5,6 +5,7 @@ import { App } from "./App";
 import words from "../data/vocabulary.json";
 import listening from "../data/listening.js";
 import { resetCsrf } from "./services/api";
+import { resetWakeState } from "./services/wake";
 let signedIn = false;
 let events: Record<string, unknown>[];
 let failSave = false;
@@ -21,6 +22,7 @@ beforeEach(() => {
   failSave = false;
   failListeningCatalog = false;
   resetCsrf();
+  resetWakeState();
   Object.defineProperty(window, "speechSynthesis", {
     configurable: true,
     value: undefined,
@@ -448,4 +450,52 @@ it("progress review list shows word details directly and allows marking mastered
       "先開始練習，或在單字庫點擊 ★ 標記不熟的題目，都會出現在這裡。",
     ),
   ).toBeInTheDocument();
+});
+it("automatically wakes a sleeping backend via direct wake_url and recovers auth and offline catalog", async () => {
+  const wakeUrl =
+    "https://english-reps-api-staging-uvmg.onrender.com/api/v1/health/live";
+  let backendAwake = false;
+  let directWakeCalls = 0;
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/api-wake-config.json") {
+        return json({ wake_url: wakeUrl });
+      }
+      if (path === wakeUrl) {
+        expect(init).toMatchObject({
+          method: "GET",
+          mode: "no-cors",
+          credentials: "omit",
+          cache: "no-store",
+        });
+        directWakeCalls++;
+        backendAwake = true;
+        return new Response(null, { status: 200 });
+      }
+      if (!backendAwake) {
+        return new Response("<html>502 Bad Gateway</html>", { status: 502 });
+      }
+      if (path.endsWith("/health/ready")) return json({ status: "ready" });
+      if (path.endsWith("/auth/me")) return json(user);
+      if (path.endsWith("/progress")) return json({ records: [] });
+      if (path.endsWith("/catalog/listening"))
+        return json({ entries: listening.entries });
+      throw new Error(`Unexpected request ${path}`);
+    }),
+  );
+
+  open("/listening");
+  expect(await screen.findByText("服務已連線")).toBeInTheDocument();
+  expect(await screen.findByText(user.email)).toBeInTheDocument();
+  await waitFor(() =>
+    expect(
+      screen.queryByText(/帳號服務正在喚醒或暫時無回應/),
+    ).not.toBeInTheDocument(),
+  );
+  await waitFor(() =>
+    expect(screen.queryByText(/已改用內建離線聽力題庫/)).not.toBeInTheDocument(),
+  );
+  expect(directWakeCalls).toBe(1);
 });

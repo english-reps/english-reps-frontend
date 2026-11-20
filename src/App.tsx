@@ -1,4 +1,4 @@
-import { Component, useEffect, useState, type ReactNode } from "react";
+import { Component, useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, NavLink, Outlet, Route, Routes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ProgressProvider } from "./contexts/ProgressContext";
@@ -9,6 +9,17 @@ import { LibraryPage } from "./pages/LibraryPage";
 import { ProgressPage } from "./pages/ProgressPage";
 import { ErrorNotice, Loading } from "./components/Common";
 import { ApiError, errorMessage, request } from "./services/api";
+import {
+  BACKEND_READY_EVENT,
+  isGatewayStatus,
+  sleepAbortable,
+  triggerDirectWake,
+  UPSTREAM_UNAVAILABLE_EVENT,
+} from "./services/wake";
+
+const WAKE_POLL_INTERVAL_MS = 4000;
+const MAX_WAKE_ATTEMPTS = 24;
+
 class ErrorBoundary extends Component<
   { children: ReactNode },
   { failed: boolean }
@@ -37,23 +48,114 @@ function Layout() {
   const auth = useAuth(),
     [logoutError, setLogoutError] = useState(""),
     [busy, setBusy] = useState(false),
-    [health, setHealth] = useState("檢查服務中…");
+    [health, setHealth] = useState("檢查服務中…"),
+    wakingRef = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
-    request("/health/ready", { signal: controller.signal })
-      .then(() => setHealth("服務已連線"))
-      .catch((error) => {
-        if (controller.signal.aborted) return;
-        const waking =
-          error instanceof ApiError &&
-          (error.status === 502 ||
-            error.status === 503 ||
-            error.status === 504);
+    const { signal } = controller;
+
+    async function wakeAndRecover(initialStatus: number) {
+      if (wakingRef.current || signal.aborted) return;
+      wakingRef.current = true;
+      let lastStatus = initialStatus;
+      try {
         setHealth(
-          waking ? `後端喚醒中或暫時無回應（${error.status}）` : "服務暫時無法連線",
+          `後端喚醒中或暫時無回應（${lastStatus}），正在自動喚醒並重新連線…`,
         );
+        let wakePromise: Promise<boolean> | undefined =
+          triggerDirectWake(signal);
+        for (
+          let attempt = 1;
+          attempt <= MAX_WAKE_ATTEMPTS && !signal.aborted;
+          attempt++
+        ) {
+          if (wakePromise) {
+            const waitController = new AbortController();
+            const abortWait = () => waitController.abort();
+            signal.addEventListener("abort", abortWait, { once: true });
+            let wakeResolved: "woke" | "none" | "timeout";
+            try {
+              wakeResolved = await Promise.race([
+                wakePromise.then((woke): "woke" | "none" =>
+                  woke ? "woke" : "none",
+                ),
+                sleepAbortable(
+                  WAKE_POLL_INTERVAL_MS,
+                  waitController.signal,
+                ).then((): "timeout" => "timeout"),
+              ]);
+            } finally {
+              waitController.abort();
+              signal.removeEventListener("abort", abortWait);
+            }
+            if (wakeResolved === "woke") {
+              wakePromise = undefined;
+            } else if (wakeResolved === "none") {
+              wakePromise = undefined;
+              await sleepAbortable(WAKE_POLL_INTERVAL_MS, signal);
+            }
+          } else {
+            if (attempt === 6 || attempt === 12) {
+              wakePromise = triggerDirectWake(signal);
+            }
+            await sleepAbortable(WAKE_POLL_INTERVAL_MS, signal);
+          }
+          if (signal.aborted) return;
+          try {
+            await request("/health/ready", { signal });
+            if (signal.aborted) return;
+            setHealth("服務已連線");
+            window.dispatchEvent(new Event(BACKEND_READY_EVENT));
+            return;
+          } catch (error) {
+            if (signal.aborted) return;
+            if (error instanceof ApiError && isGatewayStatus(error.status)) {
+              lastStatus = error.status;
+              setHealth(
+                `後端喚醒中或暫時無回應（${lastStatus}），正在自動喚醒並重新連線…`,
+              );
+              continue;
+            }
+            setHealth("服務暫時無法連線");
+            return;
+          }
+        }
+        if (!signal.aborted)
+          setHealth(`後端喚醒逾時或暫時無回應（${lastStatus}）`);
+      } finally {
+        wakingRef.current = false;
+      }
+    }
+
+    const onUpstreamUnavailable = (event: Event) => {
+      const status =
+        event instanceof CustomEvent &&
+        typeof event.detail?.status === "number"
+          ? event.detail.status
+          : 502;
+      void wakeAndRecover(status);
+    };
+    window.addEventListener(UPSTREAM_UNAVAILABLE_EVENT, onUpstreamUnavailable);
+
+    request("/health/ready", { signal })
+      .then(() => {
+        if (!signal.aborted) setHealth("服務已連線");
+      })
+      .catch((error) => {
+        if (signal.aborted) return;
+        if (error instanceof ApiError && isGatewayStatus(error.status)) {
+          void wakeAndRecover(error.status);
+        } else {
+          setHealth("服務暫時無法連線");
+        }
       });
-    return () => controller.abort();
+    return () => {
+      window.removeEventListener(
+        UPSTREAM_UNAVAILABLE_EVENT,
+        onUpstreamUnavailable,
+      );
+      controller.abort();
+    };
   }, []);
   async function logout() {
     setBusy(true);
