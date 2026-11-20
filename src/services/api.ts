@@ -1,3 +1,5 @@
+import { isGatewayStatus, UPSTREAM_UNAVAILABLE_EVENT } from "./wake";
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -50,10 +52,13 @@ export async function request<T>(
   try {
     data = await response.json();
   } catch {
-    const gatewayStatus =
-      response.status === 502 ||
-      response.status === 503 ||
-      response.status === 504;
+    const gatewayStatus = isGatewayStatus(response.status);
+    if (gatewayStatus)
+      window.dispatchEvent(
+        new CustomEvent(UPSTREAM_UNAVAILABLE_EVENT, {
+          detail: { status: response.status },
+        }),
+      );
     throw new ApiError(
       response.status || 502,
       gatewayStatus

@@ -1,0 +1,23 @@
+#!/bin/sh
+# Derive optional direct wake-up URL and matching CSP connect-src from API_UPSTREAM.
+# Only exact HTTPS origins (e.g. Render public backend URLs) enable direct wake-up;
+# internal HTTP addresses like http://api:8000 stay strictly 'self'.
+
+_raw_upstream="${API_UPSTREAM:-}"
+_trimmed_upstream="${_raw_upstream%/}"
+_wake_origin=""
+
+if [ -n "$_trimmed_upstream" ] && printf '%s\n' "$_trimmed_upstream" | grep -Eq '^https://[A-Za-z0-9.-]+(:[0-9]+)?$'; then
+    _wake_origin="$_trimmed_upstream"
+fi
+
+if [ -n "$_wake_origin" ]; then
+    API_WAKE_URL="${_wake_origin}/api/v1/health/live"
+    CSP_CONNECT_SRC="'self' ${_wake_origin}"
+else
+    API_WAKE_URL=""
+    CSP_CONNECT_SRC="'self'"
+fi
+
+export API_WAKE_URL CSP_CONNECT_SRC
+unset _raw_upstream _trimmed_upstream _wake_origin

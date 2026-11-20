@@ -12,7 +12,9 @@ FROM dependencies AS build
 COPY . .
 RUN npm run build
 FROM nginx:1.28-alpine AS production
-ENV PORT=80 API_UPSTREAM=http://api:8000 NGINX_ENVSUBST_FILTER="^(PORT|API_UPSTREAM)$"
+ENV PORT=80 API_UPSTREAM=http://api:8000 API_WAKE_URL="" CSP_CONNECT_SRC="'self'" NGINX_ENVSUBST_FILTER="^(PORT|API_UPSTREAM|API_WAKE_URL|CSP_CONNECT_SRC)$"
+COPY docker/16-api-upstream.envsh /docker-entrypoint.d/16-api-upstream.envsh
+RUN chmod +x /docker-entrypoint.d/16-api-upstream.envsh
 COPY docker/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 EXPOSE 80
