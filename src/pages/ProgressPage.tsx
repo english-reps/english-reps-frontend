@@ -240,7 +240,7 @@ export function ProgressPage() {
                           {question.prompt}
                         </strong>
                         <span className="list-pos">
-                          {topics[question.topic] || "聽力"}
+                          {topics[question.topic] || question.topic}
                         </span>
                         <span className="list-meaning">
                           {question.promptZh}
@@ -257,7 +257,8 @@ export function ProgressPage() {
                         <div className="review-detail-toolbar">
                           <span className="word-source">
                             聽力題 · {question.id.toUpperCase()} ·{" "}
-                            {topics[question.topic]} · {metaText}
+                            {topics[question.topic] || question.topic} ·{" "}
+                            {metaText}
                           </span>
                           <button
                             type="button"

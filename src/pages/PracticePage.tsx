@@ -121,12 +121,16 @@ export function PracticePage() {
             <label>
               練習範圍
               <select value={unit} onChange={(e) => setUnit(e.target.value)}>
-                <option value="all">全部 1,000 字</option>
-                {Array.from({ length: 20 }, (_, i) => (
-                  <option value={i + 1} key={i}>
-                    單元 {i + 1}
-                  </option>
-                ))}
+                <option value="all">
+                  全部 {bank.entries.length.toLocaleString()} 字
+                </option>
+                {[...new Set(bank.entries.map((word) => word.unit))]
+                  .sort((a, b) => a - b)
+                  .map((item) => (
+                    <option value={item} key={item}>
+                      單元 {item}
+                    </option>
+                  ))}
               </select>
             </label>
             <label>
@@ -200,7 +204,7 @@ export function PracticePage() {
             )}
           </section>
         </div>
-        <ProgressPanel category="vocabulary" />
+        <ProgressPanel category="vocabulary" total={bank.entries.length} />
       </div>
     </>
   );

@@ -27,11 +27,18 @@ export function Loading() {
     </p>
   );
 }
-export function ProgressPanel({ category }: { category: Category }) {
+export function ProgressPanel({
+  category,
+  total,
+}: {
+  category: Category;
+  total?: number;
+}) {
   const { records, loading, error, refresh } = useProgress();
   const { user } = useAuth();
   const summary = stats(records.filter((row) => row.category === category));
-  const total = category === "vocabulary" ? 1000 : 30;
+  const count = total ?? (category === "vocabulary" ? 1000 : 30);
+  const ratio = count > 0 ? Math.min(1, summary.mastered / count) : 0;
   return (
     <aside className="sidebar">
       <section className="progress-panel">
@@ -44,13 +51,13 @@ export function ProgressPanel({ category }: { category: Category }) {
             className="progress-ring"
             style={
               {
-                "--progress": `${(summary.mastered / total) * 100}%`,
+                "--progress": `${ratio * 100}%`,
               } as React.CSSProperties
             }
           >
             <div>
               <strong>
-                {Math.round((summary.mastered / total) * 100)}
+                {Math.round(ratio * 100)}
                 <span>%</span>
               </strong>
               <small>掌握程度</small>
@@ -61,7 +68,7 @@ export function ProgressPanel({ category }: { category: Category }) {
           <div>
             <span>已掌握</span>
             <strong>
-              {summary.mastered} / {total}
+              {summary.mastered} / {count}
             </strong>
           </div>
           <div>

@@ -9,7 +9,7 @@ Mutations require exact configured Origin + X-CSRF-Token. Bootstrap csrf first; 
 | Method/path | Auth | Request -> result | Pages |
 |---|---|---|---|
 | GET /health/live | no | `{status:"ok"}` | health UI/Compose |
-| GET /health/ready | no | database + schema check, `{status:"ready"}` | health UI/Compose |
+| GET /health/ready | no | database + schema + catalog check, `{status:"ready"}` | health UI/Compose |
 | GET /auth/csrf | no | sets CSRF cookie; `{csrf_token}` | API client bootstrap |
 | POST /auth/register | no | `{email,password}` -> `{user,csrf_token}` + session | register |
 | POST /auth/login | no | `{email,password}` -> `{user,csrf_token}` + session | login |
