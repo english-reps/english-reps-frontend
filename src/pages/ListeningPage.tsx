@@ -1,21 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useProgress } from "../contexts/ProgressContext";
 import {
   buildListeningSpeechSegments,
-  createUuid,
   listeningPartMeta,
   pickGroupedSession,
   topics,
   type Listening,
   type ListeningPart,
-  type StudyEvent,
 } from "../domain/types";
 import { SpeechPlayer } from "../domain/speech.js";
 import { useCatalog } from "../services/catalog";
-import { errorMessage } from "../services/api";
-import { ErrorNotice, Loading, ProgressPanel } from "../components/Common";
+import { BookmarkButton } from "../components/BookmarkButton";
+import { CollectionPanel, ErrorNotice, Loading } from "../components/Common";
 
 function speechErrorMessage(code: string) {
   if (code === "unsupported")
@@ -39,7 +36,7 @@ export function ListeningPage() {
   const [selectedPart, setSelectedPart] = useState<"all" | ListeningPart>(2),
     [topic, setTopic] = useState("all"),
     [difficulty, setDifficulty] = useState("all"),
-    [review, setReview] = useState(false),
+    [starredOnly, setStarredOnly] = useState(false),
     [rate, setRate] = useState(1),
     [session, setSession] = useState<Listening[] | null>(null),
     [index, setIndex] = useState(0),
@@ -64,7 +61,7 @@ export function ListeningPage() {
       (row) =>
         (topic === "all" || row.topic === topic) &&
         (difficulty === "all" || (row.difficulty || "600") === difficulty) &&
-        (!review ||
+        (!starredOnly ||
           progress.records.some(
             (record) =>
               record.entry_id === row.id && record.status === "review",
@@ -90,24 +87,24 @@ export function ListeningPage() {
     selectedPart,
     topic,
     difficulty,
-    review,
+    starredOnly,
   ]);
 
   useEffect(() => {
     if (
       !bank.loading &&
-      review &&
+      starredOnly &&
       !progress.loading &&
       session !== null &&
       session.length === 0 &&
       bank.entries.length > 0
     ) {
-      const hasReview = filterPool().length > 0;
-      if (hasReview) begin();
+      const hasStarred = filterPool().length > 0;
+      if (hasStarred) begin();
     }
   }, [
     bank.loading,
-    review,
+    starredOnly,
     progress.loading,
     progress.records,
     bank.entries,
@@ -122,7 +119,7 @@ export function ListeningPage() {
     return <ErrorNotice message={bank.error} retry={bank.retry} />;
   if (session === null) return <Loading />;
 
-  const reviewCount = progress.records.filter(
+  const starredCount = progress.records.filter(
     (record) =>
       record.category === "listening" && record.status === "review",
   ).length;
@@ -161,7 +158,7 @@ export function ListeningPage() {
           <h1>讓英文，聽進日常。</h1>
           <p>
             共 {bank.entries.length.toLocaleString()}{" "}
-            題多益聽力練習（Part 1–4），選擇想練習的題型開始。
+            題多益聽力練習（Part 1–4），重要考題可按 ★ 加入重要題庫。
           </p>
         </div>
       </div>
@@ -260,11 +257,11 @@ export function ListeningPage() {
             <label className="review-toggle">
               <input
                 type="checkbox"
-                checked={review}
-                onChange={(e) => setReview(e.target.checked)}
+                checked={starredOnly}
+                onChange={(e) => setStarredOnly(e.target.checked)}
               />
-              只練錯題
-              <span>{reviewCount}</span>
+              只練重要聽力
+              <span>{starredCount}</span>
             </label>
           </div>
           <section className="study-panel">
@@ -277,14 +274,14 @@ export function ListeningPage() {
             {!session.length ? (
               <div className="empty-state">
                 <h2>目前沒有符合的題目</h2>
-                <p>先練習，答錯的題目會加入待複習。</p>
+                <p>先練習，遇到關鍵題目可點擊 ★ 加入重要題庫。</p>
                 <button
                   type="button"
                   className="button secondary"
                   onClick={() => {
                     setTopic("all");
                     setDifficulty("all");
-                    setReview(false);
+                    setStarredOnly(false);
                   }}
                 >
                   練習全部主題
@@ -351,7 +348,7 @@ export function ListeningPage() {
             原創多益仿真題庫，非 ETS 官方題目；使用裝置的英語合成語音。
           </p>
         </div>
-        <ProgressPanel category="listening" total={bank.entries.length} />
+        <CollectionPanel category="listening" total={bank.entries.length} />
       </div>
     </>
   );
@@ -370,8 +367,6 @@ function ListeningExercise({
   onGroupHeard: (groupId: string) => void;
   next: (correct: boolean) => void;
 }) {
-  const { user } = useAuth(),
-    progress = useProgress();
   const qPart: ListeningPart = question.part ?? 2;
   const partInfo = listeningPartMeta[qPart];
   const isPrintedOptionsPart = qPart === 3 || qPart === 4;
@@ -398,10 +393,7 @@ function ListeningExercise({
     [showText, setShowText] = useState(false),
     [speechError, setSpeechError] = useState(""),
     [answer, setAnswer] = useState<string | null>(null),
-    [correct, setCorrect] = useState(false),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [pending, setPending] = useState<StudyEvent | null>(null);
+    [correct, setCorrect] = useState(false);
 
   useEffect(() => {
     function stop() {
@@ -459,23 +451,10 @@ function ListeningExercise({
     });
   }
 
-  async function save(event: StudyEvent) {
-    if (!canAnswer || playing || busy || answer !== null) return;
-    setBusy(true);
-    setError("");
-    setPending(event);
-    try {
-      const result = user
-        ? await progress.submit(event)
-        : { correct: event.answer === question.answer };
-      setCorrect(Boolean(result.correct));
-      setAnswer(event.answer!);
-      setPending(null);
-    } catch (error) {
-      setError(errorMessage(error));
-    } finally {
-      setBusy(false);
-    }
+  function choose(optionLabel: string) {
+    if (!canAnswer || playing || answer !== null) return;
+    setCorrect(optionLabel === question.answer);
+    setAnswer(optionLabel);
   }
 
   const totalSteps = speechData.segments.length;
@@ -520,10 +499,18 @@ function ListeningExercise({
           {topics[question.topic] || question.topic}
           {question.difficulty ? ` · TOEIC ${question.difficulty}+` : ""}
         </span>
-        <span className="listening-type">
-          {partInfo.shortTitle}
-          {question.groupId ? ` · ${question.groupId}` : ""}
-        </span>
+        <div className="heading-actions">
+          <BookmarkButton
+            entryId={question.id}
+            category="listening"
+            itemLabel={question.id}
+            compact
+          />
+          <span className="listening-type">
+            {partInfo.shortTitle}
+            {question.groupId ? ` · ${question.groupId}` : ""}
+          </span>
+        </div>
       </div>
 
       {qPart === 1 && question.image && (
@@ -678,17 +665,8 @@ function ListeningExercise({
             type="button"
             key={option.label}
             className={`quiz-option listening-choice ${answer !== null && option.label === question.answer ? "correct" : ""} ${answer === option.label && !correct ? "incorrect" : ""}`}
-            disabled={
-              !canAnswer || playing || busy || answer !== null || !!pending
-            }
-            onClick={() =>
-              void save({
-                event_id: createUuid(),
-                entry_id: question.id,
-                kind: "listening",
-                answer: option.label,
-              })
-            }
+            disabled={!canAnswer || playing || answer !== null}
+            onClick={() => choose(option.label)}
           >
             <span className="option-letter">{option.label}</span>
             {answer === null && !isPrintedOptionsPart
@@ -712,13 +690,6 @@ function ListeningExercise({
           ；作答後會顯示中文逐字稿與解析。
         </p>
       )}
-      {busy && <p role="status">正在儲存…</p>}
-      {error && (
-        <ErrorNotice
-          message={`${error} 尚未確認儲存。`}
-          retry={pending ? () => void save(pending) : undefined}
-        />
-      )}{" "}
       {answer !== null && (
         <div className="listening-feedback" role="status">
           <p
@@ -769,20 +740,20 @@ function ListeningExercise({
               <span key={word}>{word}</span>
             ))}
           </div>
-          <p>
-            {user ? (
-              "已儲存到你的帳號。"
-            ) : (
-              <Link to="/login">登入以儲存進度</Link>
-            )}
-          </p>
-          <button
-            type="button"
-            className="button primary next-button"
-            onClick={() => next(correct)}
-          >
-            下一題 →
-          </button>
+          <div className="feedback-actions">
+            <BookmarkButton
+              entryId={question.id}
+              category="listening"
+              itemLabel={question.id}
+            />
+            <button
+              type="button"
+              className="button primary next-button"
+              onClick={() => next(correct)}
+            >
+              下一題 →
+            </button>
+          </div>
         </div>
       )}
     </div>

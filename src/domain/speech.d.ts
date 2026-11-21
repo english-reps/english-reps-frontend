@@ -11,6 +11,7 @@ export class SpeechPlayer {
     input: string | string[],
     options?: {
       rate?: number;
+      accent?: string;
       pauseMs?: number;
       onState?: (state: string) => void;
       onStep?: (index: number, total: number) => void;

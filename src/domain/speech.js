@@ -1,9 +1,16 @@
-function pickEnglishVoice(voices = []) {
+function pickEnglishVoice(voices = [], accent = "en-US") {
   const english = voices.filter((voice) =>
     /^en([-_]|$)/i.test(voice?.lang || ""),
   );
+  const normalized = String(accent || "en-US").replace("_", "-").toLowerCase();
+  const matchesAccent = (voice) =>
+    String(voice?.lang || "")
+      .replace("_", "-")
+      .toLowerCase() === normalized;
   const local = english.filter((voice) => voice.localService);
   return (
+    local.find(matchesAccent) ||
+    english.find(matchesAccent) ||
     local.find((voice) => /^en[-_]US$/i.test(voice.lang)) ||
     local[0] ||
     english.find((voice) => /^en[-_]US$/i.test(voice.lang)) ||
@@ -61,6 +68,7 @@ export class SpeechPlayer {
     input,
     {
       rate = 1,
+      accent = "en-US",
       pauseMs = 250,
       onState = () => {},
       onStep = () => {},
@@ -96,10 +104,10 @@ export class SpeechPlayer {
         if (this.synthesis.paused) this.synthesis.resume?.();
         const utterance = new this.Utterance(segments[index]);
         this.utterance = utterance;
-        utterance.lang = "en-US";
+        utterance.lang = accent || "en-US";
         utterance.rate = Math.min(1.25, Math.max(0.65, Number(rate) || 1));
         const voices = this.synthesis.getVoices?.() || [];
-        const voice = pickEnglishVoice(voices);
+        const voice = pickEnglishVoice(voices, accent);
         if (voice) utterance.voice = voice;
         utterance.onstart = () => {
           if (generation !== this.generation || settled) return;

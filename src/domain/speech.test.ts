@@ -139,3 +139,15 @@ it("does not invoke timer helpers with SpeechPlayer as receiver (prevents browse
   utterances[0].onend?.({} as SpeechSynthesisEvent);
   player.stop();
 });
+it("selects matching TOEIC accent voice (US/UK/AU/CA) and falls back cleanly", () => {
+  const usVoice = { name: "Samantha", lang: "en-US", localService: true };
+  const ukVoice = { name: "Daniel", lang: "en-GB", localService: true };
+  const auVoice = { name: "Karen", lang: "en-AU", localService: true };
+  const { player, utterances } = engine([usVoice, ukVoice, auVoice]);
+  player.play("Good morning.", { accent: "en-GB" });
+  expect(utterances[0].lang).toBe("en-GB");
+  expect(utterances[0].voice).toBe(ukVoice);
+  player.play("Welcome aboard.", { accent: "en-CA" });
+  expect(utterances[1].lang).toBe("en-CA");
+  expect(utterances[1].voice).toBe(usVoice);
+});

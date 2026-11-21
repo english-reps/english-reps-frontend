@@ -1,18 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useProgress } from "../contexts/ProgressContext";
 import {
-  createUuid,
   pickGroupedSession,
   readingPartMeta,
   type Reading,
   type ReadingPart,
-  type StudyEvent,
 } from "../domain/types";
 import { useCatalog } from "../services/catalog";
-import { errorMessage } from "../services/api";
-import { ErrorNotice, Loading, ProgressPanel } from "../components/Common";
+import { BookmarkButton } from "../components/BookmarkButton";
+import { CollectionPanel, ErrorNotice, Loading } from "../components/Common";
 
 export function ReadingPage() {
   const { user } = useAuth();
@@ -22,7 +19,7 @@ export function ReadingPage() {
   const [selectedPart, setSelectedPart] = useState<"all" | ReadingPart>(5),
     [topic, setTopic] = useState("all"),
     [difficulty, setDifficulty] = useState("all"),
-    [review, setReview] = useState(false),
+    [starredOnly, setStarredOnly] = useState(false),
     [session, setSession] = useState<Reading[] | null>(null),
     [index, setIndex] = useState(0),
     [results, setResults] = useState<{ id: string; correct: boolean }[]>([]);
@@ -45,7 +42,7 @@ export function ReadingPage() {
       (row) =>
         (topic === "all" || row.topic === topic) &&
         (difficulty === "all" || (row.difficulty || "600") === difficulty) &&
-        (!review ||
+        (!starredOnly ||
           progress.records.some(
             (record) =>
               record.entry_id === row.id && record.status === "review",
@@ -70,24 +67,24 @@ export function ReadingPage() {
     selectedPart,
     topic,
     difficulty,
-    review,
+    starredOnly,
   ]);
 
   useEffect(() => {
     if (
       !bank.loading &&
-      review &&
+      starredOnly &&
       !progress.loading &&
       session !== null &&
       session.length === 0 &&
       bank.entries.length > 0
     ) {
-      const hasReview = filterPool().length > 0;
-      if (hasReview) begin();
+      const hasStarred = filterPool().length > 0;
+      if (hasStarred) begin();
     }
   }, [
     bank.loading,
-    review,
+    starredOnly,
     progress.loading,
     progress.records,
     bank.entries,
@@ -102,7 +99,7 @@ export function ReadingPage() {
     return <ErrorNotice message={bank.error} retry={bank.retry} />;
   if (session === null) return <Loading />;
 
-  const reviewCount = progress.records.filter(
+  const starredCount = progress.records.filter(
     (record) => record.category === "reading" && record.status === "review",
   ).length;
 
@@ -136,7 +133,7 @@ export function ReadingPage() {
           <h1>把多益閱讀，讀成直覺。</h1>
           <p>
             共 {bank.entries.length.toLocaleString()}{" "}
-            題多益閱讀練習（Part 5–7），依題型分段突破。
+            題多益閱讀練習（Part 5–7），重要考題可按 ★ 加入重要題庫。
           </p>
         </div>
       </div>
@@ -224,11 +221,11 @@ export function ReadingPage() {
             <label className="review-toggle">
               <input
                 type="checkbox"
-                checked={review}
-                onChange={(e) => setReview(e.target.checked)}
+                checked={starredOnly}
+                onChange={(e) => setStarredOnly(e.target.checked)}
               />
-              只練錯題
-              <span>{reviewCount}</span>
+              只練重要閱讀
+              <span>{starredCount}</span>
             </label>
           </div>
           <section className="study-panel">
@@ -241,14 +238,14 @@ export function ReadingPage() {
             {!session.length ? (
               <div className="empty-state">
                 <h2>目前沒有符合的題目</h2>
-                <p>先練習，答錯的題目會加入待複習。</p>
+                <p>先練習，遇到關鍵題目可點擊 ★ 加入重要題庫。</p>
                 <button
                   type="button"
                   className="button secondary"
                   onClick={() => {
                     setTopic("all");
                     setDifficulty("all");
-                    setReview(false);
+                    setStarredOnly(false);
                   }}
                 >
                   練習全部主題
@@ -310,7 +307,7 @@ export function ReadingPage() {
             原創多益仿真題庫，非 ETS 官方題目。
           </p>
         </div>
-        <ProgressPanel category="reading" total={bank.entries.length} />
+        <CollectionPanel category="reading" total={bank.entries.length} />
       </div>
     </>
   );
@@ -323,32 +320,14 @@ function ReadingExercise({
   question: Reading;
   next: (correct: boolean) => void;
 }) {
-  const { user } = useAuth(),
-    progress = useProgress();
   const partInfo = readingPartMeta[question.part];
   const [answer, setAnswer] = useState<string | null>(null),
-    [correct, setCorrect] = useState(false),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [pending, setPending] = useState<StudyEvent | null>(null);
+    [correct, setCorrect] = useState(false);
 
-  async function save(event: StudyEvent) {
-    if (busy || answer !== null) return;
-    setBusy(true);
-    setError("");
-    setPending(event);
-    try {
-      const result = user
-        ? await progress.submit(event)
-        : { correct: event.answer === question.answer };
-      setCorrect(Boolean(result.correct));
-      setAnswer(event.answer!);
-      setPending(null);
-    } catch (error) {
-      setError(errorMessage(error));
-    } finally {
-      setBusy(false);
-    }
+  function choose(optionLabel: string) {
+    if (answer !== null) return;
+    setCorrect(optionLabel === question.answer);
+    setAnswer(optionLabel);
   }
 
   return (
@@ -358,10 +337,18 @@ function ReadingExercise({
           {question.id.toUpperCase()} · {question.topic}
           {question.difficulty ? ` · TOEIC ${question.difficulty}+` : ""}
         </span>
-        <span className="listening-type">
-          {partInfo.shortTitle}
-          {question.groupId ? ` · ${question.groupId}` : ""}
-        </span>
+        <div className="heading-actions">
+          <BookmarkButton
+            entryId={question.id}
+            category="reading"
+            itemLabel={question.id}
+            compact
+          />
+          <span className="listening-type">
+            {partInfo.shortTitle}
+            {question.groupId ? ` · ${question.groupId}` : ""}
+          </span>
+        </div>
       </div>
 
       {question.passage && (
@@ -395,15 +382,8 @@ function ReadingExercise({
             type="button"
             key={option.label}
             className={`quiz-option listening-choice ${answer !== null && option.label === question.answer ? "correct" : ""} ${answer === option.label && !correct ? "incorrect" : ""}`}
-            disabled={busy || answer !== null || !!pending}
-            onClick={() =>
-              void save({
-                event_id: createUuid(),
-                entry_id: question.id,
-                kind: "reading",
-                answer: option.label,
-              })
-            }
+            disabled={answer !== null}
+            onClick={() => choose(option.label)}
           >
             <span className="option-letter">{option.label}</span>
             <span lang="en">{option.text}</span>
@@ -420,13 +400,6 @@ function ReadingExercise({
         ))}
       </div>
 
-      {busy && <p role="status">正在儲存…</p>}
-      {error && (
-        <ErrorNotice
-          message={`${error} 尚未確認儲存。`}
-          retry={pending ? () => void save(pending) : undefined}
-        />
-      )}{" "}
       {answer !== null && (
         <div className="listening-feedback" role="status">
           <p
@@ -479,20 +452,20 @@ function ReadingExercise({
               <span key={word}>{word}</span>
             ))}
           </div>
-          <p>
-            {user ? (
-              "已儲存到你的帳號。"
-            ) : (
-              <Link to="/login">登入以儲存進度</Link>
-            )}
-          </p>
-          <button
-            type="button"
-            className="button primary next-button"
-            onClick={() => next(correct)}
-          >
-            下一題 →
-          </button>
+          <div className="feedback-actions">
+            <BookmarkButton
+              entryId={question.id}
+              category="reading"
+              itemLabel={question.id}
+            />
+            <button
+              type="button"
+              className="button primary next-button"
+              onClick={() => next(correct)}
+            >
+              下一題 →
+            </button>
+          </div>
         </div>
       )}
     </div>

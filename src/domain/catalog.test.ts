@@ -4,11 +4,14 @@ import listening from "../../data/listening.js";
 import reading from "../../data/reading.json";
 import {
   buildListeningSpeechSegments,
+  buildLocalMockExam,
   choices,
   definition,
+  gradeLocalMockExam,
   pickGroupedSession,
   stats,
   type Listening,
+  type Reading,
   type Word,
 } from "./types";
 it("retains all source words, listening Parts 1-4, and reading Parts 5-7 with unique IDs", () => {
@@ -72,4 +75,53 @@ it("empty progress has no invented accuracy", () => {
     attempts: 0,
     accuracy: null,
   });
+});
+it("builds official 100-question Listening and Reading mock exams and grades them accurately", () => {
+  const listeningExam = buildLocalMockExam(
+    "listening",
+    listening.entries as Listening[],
+    reading.entries as Reading[],
+    () => 0.37,
+  );
+  expect(listeningExam.question_ids).toHaveLength(100);
+  expect(listeningExam.duration_seconds).toBe(2700);
+  const listeningById = new Map(
+    (listening.entries as Listening[]).map((q) => [q.id, q]),
+  );
+  const lCounts = [1, 2, 3, 4].map(
+    (p) =>
+      listeningExam.question_ids.filter(
+        (id) => (listeningById.get(id)?.part ?? 2) === p,
+      ).length,
+  );
+  expect(lCounts).toEqual([6, 25, 39, 30]);
+
+  const readingExam = buildLocalMockExam(
+    "reading",
+    listening.entries as Listening[],
+    reading.entries as Reading[],
+    () => 0.37,
+  );
+  expect(readingExam.question_ids).toHaveLength(100);
+  expect(readingExam.duration_seconds).toBe(4500);
+  const readingById = new Map(
+    (reading.entries as Reading[]).map((q) => [q.id, q]),
+  );
+  const rCounts = [5, 6, 7].map(
+    (p) =>
+      readingExam.question_ids.filter((id) => readingById.get(id)?.part === p)
+        .length,
+  );
+  expect(rCounts).toEqual([30, 16, 54]);
+
+  const firstId = readingExam.question_ids[0];
+  const firstItem = readingById.get(firstId)!;
+  const graded = gradeLocalMockExam(
+    { ...readingExam, answers: { [firstId]: firstItem.answer } },
+    readingById,
+  );
+  expect(graded.status).toBe("completed");
+  expect(graded.correct_count).toBe(1);
+  expect(graded.wrong_ids).toHaveLength(99);
+  expect(graded.scaled_score).toBeGreaterThanOrEqual(5);
 });
