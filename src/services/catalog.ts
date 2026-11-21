@@ -8,6 +8,10 @@ async function loadFallback<T>(category: Category): Promise<T[]> {
     const data = await import("../../data/listening.js");
     return data.default.entries as unknown as T[];
   }
+  if (category === "reading") {
+    const data = await import("../../data/reading.json");
+    return data.default.entries as unknown as T[];
+  }
   const data = await import("../../data/vocabulary.json");
   return data.default.entries as unknown as T[];
 }

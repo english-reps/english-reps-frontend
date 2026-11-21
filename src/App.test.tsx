@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { App } from "./App";
 import words from "../data/vocabulary.json";
 import listening from "../data/listening.js";
+import reading from "../data/reading.json";
 import { resetCsrf } from "./services/api";
 import { resetWakeState } from "./services/wake";
 let signedIn = false;
@@ -51,6 +52,8 @@ beforeEach(() => {
           return json({ error: { message: "unavailable" } }, 503);
         return json({ entries: listening.entries });
       }
+      if (path.endsWith("/catalog/reading"))
+        return json({ entries: reading.entries });
       if (path.endsWith("/progress/events")) {
         const body = JSON.parse(String(init?.body));
         events.push(body);
@@ -59,7 +62,12 @@ beforeEach(() => {
           correct: body.kind === "card" ? null : true,
           record: {
             entry_id: body.entry_id,
-            category: body.kind === "listening" ? "listening" : "vocabulary",
+            category:
+              body.kind === "listening"
+                ? "listening"
+                : body.kind === "reading"
+                  ? "reading"
+                  : "vocabulary",
             status: body.kind === "card" ? body.rating : "mastered",
             attempts: body.kind === "card" ? 0 : 1,
             correct: body.kind === "card" ? 0 : 1,
@@ -498,4 +506,41 @@ it("automatically wakes a sleeping backend via direct wake_url and recovers auth
     expect(screen.queryByText(/已改用內建離線聽力題庫/)).not.toBeInTheDocument(),
   );
   expect(directWakeCalls).toBe(1);
+});
+it("supports switching between TOEIC Listening Parts 1-4 and practicing Reading Parts 5-7", async () => {
+  signedIn = true;
+  open("/listening");
+  await screen.findByRole("button", { name: "A 回答 A" });
+
+  // Switch to Part 1 (圖片描述)
+  fireEvent.click(screen.getByRole("tab", { name: /圖片描述/ }));
+  expect(
+    await screen.findByRole("img", { name: /Part 1/i }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "D 回答 D" })).toBeInTheDocument();
+
+  // Switch to Part 3 (簡短對話)
+  fireEvent.click(screen.getByRole("tab", { name: /簡短對話/ }));
+  expect(
+    await screen.findByText("聽雙人對話，選出題目的最佳答案"),
+  ).toBeInTheDocument();
+
+  // Navigate to Reading Practice (閱讀練習)
+  fireEvent.click(screen.getByRole("link", { name: "閱讀練習" }));
+  expect(
+    await screen.findByRole("heading", { name: "把多益閱讀，讀成直覺。" }),
+  ).toBeInTheDocument();
+
+  // Part 5 is selected by default; switch to Part 6 (短文填空) and verify passage renders
+  fireEvent.click(screen.getByRole("tab", { name: /短文填空/ }));
+  expect(await screen.findByLabelText("閱讀文章")).toBeInTheDocument();
+
+  // Switch to Part 7 (閱讀理解), answer a question, and verify event is saved
+  fireEvent.click(screen.getByRole("tab", { name: /閱讀理解/ }));
+  expect(await screen.findByLabelText("閱讀文章")).toBeInTheDocument();
+  const optionsGroup = screen.getByRole("group", { name: "選擇答案" });
+  const firstChoice = optionsGroup.querySelector("button")!;
+  fireEvent.click(firstChoice);
+  expect(await screen.findByText("已儲存到你的帳號。")).toBeInTheDocument();
+  expect(events[0]).toMatchObject({ kind: "reading", answer: "A" });
 });

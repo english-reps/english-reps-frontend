@@ -5,6 +5,7 @@ import { ProgressProvider } from "./contexts/ProgressContext";
 import { AuthPage } from "./pages/AuthPage";
 import { PracticePage } from "./pages/PracticePage";
 import { ListeningPage } from "./pages/ListeningPage";
+import { ReadingPage } from "./pages/ReadingPage";
 import { LibraryPage } from "./pages/LibraryPage";
 import { ProgressPage } from "./pages/ProgressPage";
 import { ErrorNotice, Loading } from "./components/Common";
@@ -187,6 +188,7 @@ function Layout() {
             {[
               ["/practice", "單字練習"],
               ["/listening", "聽力練習"],
+              ["/reading", "閱讀練習"],
               ["/library", "單字庫"],
               ["/progress", "我的進度"],
             ].map(([path, label]) => (
@@ -251,9 +253,11 @@ export function App() {
                     to={
                       window.location.hash === "#listening"
                         ? "/listening"
-                        : window.location.hash === "#library"
-                          ? "/library"
-                          : "/practice"
+                        : window.location.hash === "#reading"
+                          ? "/reading"
+                          : window.location.hash === "#library"
+                            ? "/library"
+                            : "/practice"
                     }
                     replace
                   />
@@ -261,6 +265,7 @@ export function App() {
               />
               <Route path="practice" element={<PracticePage />} />
               <Route path="listening" element={<ListeningPage />} />
+              <Route path="reading" element={<ReadingPage />} />
               <Route path="library" element={<LibraryPage />} />
               <Route path="progress" element={<ProgressPage />} />
               <Route path="login" element={<AuthPage mode="login" />} />

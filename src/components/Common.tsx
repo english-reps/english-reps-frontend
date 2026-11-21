@@ -37,7 +37,9 @@ export function ProgressPanel({
   const { records, loading, error, refresh } = useProgress();
   const { user } = useAuth();
   const summary = stats(records.filter((row) => row.category === category));
-  const count = total ?? (category === "vocabulary" ? 1000 : 30);
+  const count =
+    total ??
+    (category === "vocabulary" ? 1000 : category === "reading" ? 805 : 332);
   const ratio = count > 0 ? Math.min(1, summary.mastered / count) : 0;
   return (
     <aside className="sidebar">
