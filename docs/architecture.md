@@ -27,8 +27,9 @@ Same-origin cookies and explicit Origin checks; no CORS middleware is needed.
 - sessions: hashed opaque token, user FK, hashed CSRF token, expiry. Raw tokens are cookies only.
 - catalog files (`data/vocabulary.json`, `data/listening/part1..4.json`, `data/reading/part5..7.json` in backend): stable word/listening/reading IDs and content loaded and validated in memory by the API.
 - study_events: user + client event UUID, canonical request and server-graded result; immutable, idempotent.
-- progress: user + item, status, quiz attempts/correct count, updated time.
-User -> many sessions/events/progress; PostgreSQL stores only user accounts, sessions, auth rate limits and learning progress.
+- progress: user + item, active star bookmark status (`review` / `unseen`).
+- mock_exams: user-scoped in-progress and completed timed TOEIC Listening (100Q/45m) and Reading (100Q/75m) mock exams, answers, in-exam flags, server-graded score, wrong IDs, and per-part stats.
+User -> many sessions/events/progress/mock_exams; PostgreSQL stores user accounts, sessions, auth rate limits, star bookmarks and mock exam sessions/history.
 Every private query uses the authenticated user ID from the server, never a client-supplied owner.
 Catalog is self-study material, not a confidential exam bank. Listening uses device speech synthesis.
 
@@ -38,21 +39,22 @@ random token; every mutation checks the same-origin Origin and X-CSRF-Token agai
 then (when authenticated) the session-bound CSRF hash. Registration/login rotate both tokens.
 Passwords use Argon2; sessions expire and logout revokes the database row. Login attempts use a
 bounded database rate-limit table so limits apply across API workers. Never log passwords/tokens.
-Progress events are graded by the backend. Event UUID retries return the existing result without
+Progress events and mock exam submissions are validated/graded by the backend. Event UUID retries return the existing result without
 incrementing counters; changed reuse returns 409. SQL updates increment counters atomically.
 The UI waits for server confirmation, retains failed submissions for an explicit retry, and refreshes
 progress on focus. Network errors never appear as successful saves. Logout clears in-memory account data.
 No private progress is put in localStorage.
 
 ## Pages
-- /practice: vocabulary cards/quizzes and mastery stats.
-- /listening: TOEIC Listening Parts 1–4 practice, playback gate, transcript and review.
-- /reading: TOEIC Reading Parts 5–7 practice, passages, explanations and review.
-- /library: searchable, paginated vocabulary with unit/part-of-speech/unfamiliar filters and star toggles.
+- /practice: vocabulary cards/quizzes with active star bookmarking.
+- /listening: TOEIC Listening Parts 1–4 practice, playback gate, transcript, and active star bookmarking.
+- /reading: TOEIC Reading Parts 5–7 practice, passages, explanations, and active star bookmarking.
+- /mock-exam: timed TOEIC Listening (100Q/45m) and Reading (100Q/75m) official-format mock exams with in-exam flagging, autosave/resume, server grading, post-exam review, and deletion.
+- /library: searchable, paginated vocabulary with unit/part-of-speech/starred filters and star toggles.
 - /login, /register: credentials, validation, session creation.
-- /progress: private summary and wrong/starred review answers.
+- /progress: private starred words (with remove), important listening/reading bank (with remove), and mock exam history.
 - /*: not-found; shared loading/error/retry UI and session-expiry handling.
-Guests can browse and practice without saving; login is required for account progress.
+Guests can browse and practice without saving; login is required for account bookmarks and persistent mock exam history.
 
 ## Delivery and validation
 Compose waits for database health -> one-shot migration -> API readiness -> web/dev frontend.

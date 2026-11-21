@@ -286,3 +286,286 @@ export function createUuid(): string {
   const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
+
+export type MockSection = "listening" | "reading";
+export type MockExamStatus = "in_progress" | "completed";
+export type ToeicAccent = "en-US" | "en-GB" | "en-AU" | "en-CA";
+
+export interface MockExamPartStat {
+  part: number;
+  total: number;
+  correct: number;
+}
+
+export interface MockExam {
+  id: string;
+  section: MockSection;
+  status: MockExamStatus;
+  question_ids: string[];
+  answers: Record<string, string>;
+  flagged_ids: string[];
+  played_keys: string[];
+  current_index: number;
+  duration_seconds: number;
+  remaining_seconds: number;
+  total_questions: number;
+  correct_count: number | null;
+  scaled_score: number | null;
+  wrong_ids: string[] | null;
+  part_stats: MockExamPartStat[] | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export const TOEIC_ACCENTS: { code: ToeicAccent; label: string }[] = [
+  { code: "en-US", label: "美式 (US)" },
+  { code: "en-GB", label: "英式 (UK)" },
+  { code: "en-AU", label: "澳式 (AU)" },
+  { code: "en-CA", label: "加式 (CA)" },
+];
+
+export function accentForMockKey(key: string): {
+  code: ToeicAccent;
+  label: string;
+} {
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  }
+  return TOEIC_ACCENTS[hash % TOEIC_ACCENTS.length];
+}
+
+export function formatCountdown(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(safe / 60);
+  const seconds = safe % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function groupByKey<T extends { id: string; groupId?: string | null }>(
+  items: T[],
+): T[][] {
+  const groups: T[][] = [];
+  const byGid = new Map<string, T[]>();
+  for (const item of items) {
+    if (item.groupId) {
+      let bucket = byGid.get(item.groupId);
+      if (!bucket) {
+        bucket = [];
+        byGid.set(item.groupId, bucket);
+        groups.push(bucket);
+      }
+      bucket.push(item);
+    } else {
+      groups.push([item]);
+    }
+  }
+  return groups;
+}
+
+function classifyPart7(group: Reading[]): "single" | "double" | "triple" {
+  const first = group[0];
+  const passage = first.passage || "";
+  const topic = first.topic || "";
+  const keywords = (first.keywords || []).join(" ").toLowerCase();
+  if (
+    keywords.includes("triple") ||
+    topic.includes("三篇") ||
+    passage.includes("DOCUMENT 3")
+  )
+    return "triple";
+  if (
+    keywords.includes("double") ||
+    topic.includes("雙篇") ||
+    passage.includes("DOCUMENT 2")
+  )
+    return "double";
+  return "single";
+}
+
+function pickExactGroups<T>(
+  groups: T[][],
+  targetQuestions: number,
+  exactGroups: number | null,
+  random = Math.random,
+): T[][] | null {
+  const pool = shuffle(groups, random);
+  const failed = new Set<string>();
+  const chosen: T[][] = [];
+  function dfs(idx: number, remQ: number, remG: number | null): boolean {
+    if (remQ === 0 && (remG === null || remG === 0)) return true;
+    if (remQ < 0 || idx >= pool.length || (remG !== null && remG <= 0))
+      return false;
+    const key = `${idx}:${remQ}:${remG ?? "*"}`;
+    if (failed.has(key)) return false;
+    const sz = pool[idx].length;
+    if (sz <= remQ) {
+      chosen.push(pool[idx]);
+      if (dfs(idx + 1, remQ - sz, remG === null ? null : remG - 1)) return true;
+      chosen.pop();
+    }
+    if (dfs(idx + 1, remQ, remG)) return true;
+    failed.add(key);
+    return false;
+  }
+  return dfs(0, targetQuestions, exactGroups) ? chosen : null;
+}
+
+export function buildLocalMockExam(
+  section: MockSection,
+  listeningEntries: Listening[],
+  readingEntries: Reading[],
+  random = Math.random,
+): MockExam {
+  let questionIds: string[] = [];
+  if (section === "listening") {
+    const p1 = shuffle(
+      listeningEntries.filter((q) => (q.part ?? 2) === 1),
+      random,
+    ).slice(0, 6);
+    const p2 = shuffle(
+      listeningEntries.filter((q) => (q.part ?? 2) === 2),
+      random,
+    ).slice(0, 25);
+    const p3 = shuffle(
+      groupByKey(listeningEntries.filter((q) => (q.part ?? 2) === 3)),
+      random,
+    )
+      .slice(0, 13)
+      .flat();
+    const p4 = shuffle(
+      groupByKey(listeningEntries.filter((q) => (q.part ?? 2) === 4)),
+      random,
+    )
+      .slice(0, 10)
+      .flat();
+    questionIds = [...p1, ...p2, ...p3, ...p4].map((q) => q.id);
+  } else {
+    const p5 = shuffle(
+      readingEntries.filter((q) => q.part === 5),
+      random,
+    ).slice(0, 30);
+    const p6 = shuffle(
+      groupByKey(readingEntries.filter((q) => q.part === 6)),
+      random,
+    )
+      .slice(0, 4)
+      .flat();
+    const p7Groups = groupByKey(readingEntries.filter((q) => q.part === 7));
+    const singles = p7Groups.filter((g) => classifyPart7(g) === "single");
+    const doubles = p7Groups.filter((g) => classifyPart7(g) === "double");
+    const triples = p7Groups.filter((g) => classifyPart7(g) === "triple");
+    const pickedSingles =
+      pickExactGroups(singles, 29, 10, random) ||
+      pickExactGroups(singles, 29, null, random) ||
+      [];
+    pickedSingles.sort((a, b) => a.length - b.length);
+    let pickedMulti: Reading[][] | null = null;
+    for (const [dq, tq] of shuffle(
+      [
+        [10, 15],
+        [8, 17],
+        [12, 13],
+        [13, 12],
+      ],
+      random,
+    )) {
+      const dp = pickExactGroups(doubles, dq, null, random);
+      const tp = pickExactGroups(triples, tq, null, random);
+      if (dp && tp) {
+        pickedMulti = [...dp, ...tp];
+        break;
+      }
+    }
+    const p7 = [
+      ...pickedSingles,
+      ...(pickedMulti ||
+        pickExactGroups([...doubles, ...triples], 25, null, random) ||
+        []),
+    ].flat();
+    questionIds = [...p5, ...p6, ...p7].map((q) => q.id);
+  }
+  const duration = section === "listening" ? 45 * 60 : 75 * 60;
+  const now = new Date().toISOString();
+  return {
+    id: createUuid(),
+    section,
+    status: "in_progress",
+    question_ids: questionIds,
+    answers: {},
+    flagged_ids: [],
+    played_keys: [],
+    current_index: 0,
+    duration_seconds: duration,
+    remaining_seconds: duration,
+    total_questions: questionIds.length,
+    correct_count: null,
+    scaled_score: null,
+    wrong_ids: null,
+    part_stats: null,
+    created_at: now,
+    updated_at: now,
+    completed_at: null,
+  };
+}
+
+export function estimateToeicSectionScore(
+  section: MockSection,
+  correct: number,
+  total: number,
+): number {
+  if (total <= 0 || correct <= 0) return 5;
+  const ratio = Math.min(1, Math.max(0, correct / total));
+  let scaled =
+    section === "listening"
+      ? 5 + Math.round((Math.pow(ratio, 0.92) * 490) / 5) * 5
+      : 5 + Math.round((Math.pow(ratio, 1.03) * 490) / 5) * 5;
+  if (section === "listening" && correct >= total - 3) scaled = 495;
+  if (section === "reading" && correct >= total - 1) scaled = 495;
+  return Math.max(5, Math.min(495, scaled));
+}
+
+export function gradeLocalMockExam(
+  exam: MockExam,
+  entriesById: Map<string, Listening | Reading>,
+): MockExam {
+  let correctCount = 0;
+  const wrongIds: string[] = [];
+  const perPart = new Map<number, { total: number; correct: number }>();
+  for (const id of exam.question_ids) {
+    const item = entriesById.get(id);
+    if (!item) {
+      wrongIds.push(id);
+      continue;
+    }
+    const part = item.part ?? (exam.section === "listening" ? 2 : 5);
+    const stat = perPart.get(part) || { total: 0, correct: 0 };
+    stat.total += 1;
+    if (exam.answers[id] && exam.answers[id] === item.answer) {
+      correctCount += 1;
+      stat.correct += 1;
+    } else {
+      wrongIds.push(id);
+    }
+    perPart.set(part, stat);
+  }
+  const partStats: MockExamPartStat[] = [...perPart.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([part, stat]) => ({ part, ...stat }));
+  const now = new Date().toISOString();
+  return {
+    ...exam,
+    status: "completed",
+    correct_count: correctCount,
+    scaled_score: estimateToeicSectionScore(
+      exam.section,
+      correctCount,
+      exam.question_ids.length,
+    ),
+    wrong_ids: wrongIds,
+    part_stats: partStats,
+    completed_at: now,
+    updated_at: now,
+  };
+}

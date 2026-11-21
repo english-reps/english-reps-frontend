@@ -18,8 +18,14 @@ Mutations require exact configured Origin + X-CSRF-Token. Bootstrap csrf first; 
 | GET /catalog/vocabulary | no | `{entries: Vocabulary[]}` | practice/library |
 | GET /catalog/listening | no | `{entries: Listening[]}` (optional `?part=1..4`) | listening |
 | GET /catalog/reading | no | `{entries: Reading[]}` (optional `?part=5..7`) | reading |
-| GET /progress | yes | `{records: Progress[]}` for current user only | all practice/progress |
-| POST /progress/events | yes | StudyEvent -> `{correct,record}` | cards/quizzes/listening/reading/library |
+| GET /progress | yes | `{records: Progress[]}` for current user only | bookmarks / progress |
+| POST /progress/events | yes | StudyEvent -> `{correct,record}` | star bookmarks / review removal |
+| GET /mock-exams | yes | `{exams: MockExam[]}` for current user only | mock-exam / progress |
+| POST /mock-exams | yes | `{section:"listening"|"reading"}` -> `201 {exam}` (100 random official-format questions) | mock-exam |
+| GET /mock-exams/{id} | yes | `{exam}` owned by current user | mock-exam |
+| PATCH /mock-exams/{id} | yes | autosave `{answers,flagged_ids,played_keys,current_index,remaining_seconds}` -> `{exam}` | mock-exam |
+| POST /mock-exams/{id}/submit | yes | final snapshot -> server-graded completed `{exam}` | mock-exam |
+| DELETE /mock-exams/{id} | yes | `204`, deletes in-progress or completed mock exam | mock-exam / progress |
 
 User: `{id:UUID,email:string}`. Password length 12..128, email normalized/case-insensitive.
 Catalog preserves original shapes/IDs: vocabulary has id,word,senses[{pos,meaning}],example,

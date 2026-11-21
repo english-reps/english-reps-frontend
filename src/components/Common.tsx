@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
-import { stats, type Category } from "../domain/types";
+import type { Category } from "../domain/types";
 import { useProgress } from "../contexts/ProgressContext";
 import { useAuth } from "../contexts/AuthContext";
+
 export function ErrorNotice({
   message,
   retry,
@@ -20,6 +21,7 @@ export function ErrorNotice({
     </div>
   );
 }
+
 export function Loading() {
   return (
     <p className="loading" role="status">
@@ -27,7 +29,8 @@ export function Loading() {
     </p>
   );
 }
-export function ProgressPanel({
+
+export function CollectionPanel({
   category,
   total,
 }: {
@@ -36,68 +39,81 @@ export function ProgressPanel({
 }) {
   const { records, loading, error, refresh } = useProgress();
   const { user } = useAuth();
-  const summary = stats(records.filter((row) => row.category === category));
-  const count =
+  const starredVocab = records.filter(
+    (row) => row.category === "vocabulary" && row.status === "review",
+  ).length;
+  const starredListening = records.filter(
+    (row) => row.category === "listening" && row.status === "review",
+  ).length;
+  const starredReading = records.filter(
+    (row) => row.category === "reading" && row.status === "review",
+  ).length;
+  const isVocab = category === "vocabulary";
+  const currentCount = isVocab
+    ? starredVocab
+    : category === "listening"
+      ? starredListening
+      : starredReading;
+  const totalBankCount =
     total ??
     (category === "vocabulary" ? 1000 : category === "reading" ? 805 : 332);
-  const ratio = count > 0 ? Math.min(1, summary.mastered / count) : 0;
+
   return (
     <aside className="sidebar">
-      <section className="progress-panel">
+      <section className="progress-panel collection-summary-panel">
         <div className="panel-heading">
-          <h2>每一點進步，都算數</h2>
-          <span className="tiny-label">YOUR PROGRESS</span>
+          <h2>{isVocab ? "星號單字本" : "重要題庫收藏"}</h2>
+          <span className="tiny-label">BOOKMARKS</span>
         </div>
-        <div className="progress-visual">
-          <div
-            className="progress-ring"
-            style={
-              {
-                "--progress": `${ratio * 100}%`,
-              } as React.CSSProperties
-            }
+        <div className="collection-highlight">
+          <strong>{currentCount}</strong>
+          <span>
+            {isVocab
+              ? "個已加星號的單字"
+              : category === "listening"
+                ? "題已存重要聽力題"
+                : "題已存重要閱讀題"}
+          </span>
+        </div>
+        <div className="stats collection-stats">
+          <div>
+            <span>目前題庫</span>
+            <strong>{totalBankCount.toLocaleString()}</strong>
+          </div>
+          <div>
+            <span>星號單字</span>
+            <strong>{starredVocab}</strong>
+          </div>
+          <div>
+            <span>重要聽讀</span>
+            <strong>{starredListening + starredReading}</strong>
+          </div>
+        </div>
+        <div className="collection-links">
+          <Link
+            to={isVocab ? "/progress?tab=words" : "/progress?tab=questions"}
+            className="button secondary small"
           >
-            <div>
-              <strong>
-                {Math.round(ratio * 100)}
-                <span>%</span>
-              </strong>
-              <small>掌握程度</small>
-            </div>
-          </div>
-        </div>
-        <div className="stats">
-          <div>
-            <span>已掌握</span>
-            <strong>
-              {summary.mastered} / {count}
-            </strong>
-          </div>
-          <div>
-            <span>待複習</span>
-            <strong>{summary.review}</strong>
-          </div>
-          <div>
-            <span>測驗正確率</span>
-            <strong>
-              {summary.accuracy === null ? "—" : `${summary.accuracy}%`}
-            </strong>
-          </div>
+            前往{isVocab ? "星號單字清單" : "重要題庫清單"}
+          </Link>
+          <Link to="/mock-exam" className="button primary small">
+            模擬多益正式考試
+          </Link>
         </div>
         <p className="local-note">
           {user ? (
-            "進度儲存在你的帳號，可跨裝置使用"
+            "點擊 ★ 即可主動收藏，不會自動加入答錯題目。"
           ) : (
-            <Link to="/login">登入以儲存與同步進度</Link>
+            <Link to="/login">登入以跨裝置儲存星號與模考紀錄</Link>
           )}
         </p>
-        {loading && <p role="status">正在同步進度…</p>}
+        {loading && <p role="status">正在同步收藏…</p>}
         {error && <ErrorNotice message={error} retry={() => void refresh()} />}
       </section>
       <section className="note-panel">
-        <p className="eyebrow">MAKE IT A HABIT</p>
-        <h2>記不住，也沒關係。</h2>
-        <p>每次練習 10 題，多見幾次就會慢慢熟悉。</p>
+        <p className="eyebrow">ACTIVE CURATION</p>
+        <h2>只留你真正想複習的。</h2>
+        <p>練習遇到不熟的單字或關鍵考題時按下 ★，集中到個人清單反覆精練。</p>
       </section>
     </aside>
   );

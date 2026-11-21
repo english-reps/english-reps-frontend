@@ -5,23 +5,46 @@ import { App } from "./App";
 import words from "../data/vocabulary.json";
 import listening from "../data/listening.js";
 import reading from "../data/reading.json";
+import {
+  buildLocalMockExam,
+  gradeLocalMockExam,
+  type Listening,
+  type MockExam,
+  type Reading,
+} from "./domain/types";
 import { resetCsrf } from "./services/api";
 import { resetWakeState } from "./services/wake";
+
 let signedIn = false;
 let events: Record<string, unknown>[];
+let mockExamsDb: MockExam[];
 let failSave = false;
 let failListeningCatalog = false;
 const user = { id: "owner-1", email: "learner@example.com" };
+const listeningById = new Map(
+  (listening.entries as Listening[]).map((item) => [item.id, item]),
+);
+const readingById = new Map(
+  (reading.entries as Reading[]).map((item) => [item.id, item]),
+);
+const allById = new Map<string, Listening | Reading>([
+  ...listeningById.entries(),
+  ...readingById.entries(),
+]);
+
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
     status,
     headers: { "Content-Type": "application/json" },
   });
+
 beforeEach(() => {
   signedIn = false;
   events = [];
+  mockExamsDb = [];
   failSave = false;
   failListeningCatalog = false;
+  sessionStorage.clear();
   resetCsrf();
   resetWakeState();
   Object.defineProperty(window, "speechSynthesis", {
@@ -31,6 +54,7 @@ beforeEach(() => {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (path: string, init?: RequestInit) => {
+      const method = (init?.method || "GET").toUpperCase();
       if (path.endsWith("/health/ready")) return json({ status: "ready" });
       if (path.endsWith("/auth/me"))
         return signedIn
@@ -54,20 +78,81 @@ beforeEach(() => {
       }
       if (path.endsWith("/catalog/reading"))
         return json({ entries: reading.entries });
+      if (path.endsWith("/mock-exams") && method === "GET") {
+        return json({ exams: mockExamsDb });
+      }
+      if (path.endsWith("/mock-exams") && method === "POST") {
+        const body = JSON.parse(String(init?.body));
+        const exam = buildLocalMockExam(
+          body.section,
+          listening.entries as Listening[],
+          reading.entries as Reading[],
+          () => 0.25,
+        );
+        mockExamsDb = [exam, ...mockExamsDb];
+        return json({ exam }, 201);
+      }
+      const mockSubmitMatch = /\/mock-exams\/([^/]+)\/submit$/.exec(path);
+      if (mockSubmitMatch && method === "POST") {
+        const id = mockSubmitMatch[1];
+        const existing = mockExamsDb.find((row) => row.id === id);
+        if (!existing)
+          return json({ error: { message: "not found" } }, 404);
+        const body = init?.body ? JSON.parse(String(init.body)) : {};
+        const merged: MockExam = {
+          ...existing,
+          answers: body.answers ?? existing.answers,
+          flagged_ids: body.flagged_ids ?? existing.flagged_ids,
+          played_keys: body.played_keys ?? existing.played_keys,
+          current_index: body.current_index ?? existing.current_index,
+          remaining_seconds:
+            body.remaining_seconds ?? existing.remaining_seconds,
+        };
+        const completed = gradeLocalMockExam(merged, allById);
+        mockExamsDb = mockExamsDb.map((row) =>
+          row.id === id ? completed : row,
+        );
+        return json({ exam: completed });
+      }
+      const mockIdMatch = /\/mock-exams\/([^/]+)$/.exec(path);
+      if (mockIdMatch) {
+        const id = mockIdMatch[1];
+        const existing = mockExamsDb.find((row) => row.id === id);
+        if (!existing)
+          return json({ error: { message: "not found" } }, 404);
+        if (method === "GET") return json({ exam: existing });
+        if (method === "PATCH") {
+          const body = JSON.parse(String(init?.body));
+          const updated: MockExam = {
+            ...existing,
+            ...body,
+            updated_at: new Date().toISOString(),
+          };
+          mockExamsDb = mockExamsDb.map((row) =>
+            row.id === id ? updated : row,
+          );
+          return json({ exam: updated });
+        }
+        if (method === "DELETE") {
+          mockExamsDb = mockExamsDb.filter((row) => row.id !== id);
+          return new Response(null, { status: 204 });
+        }
+      }
       if (path.endsWith("/progress/events")) {
         const body = JSON.parse(String(init?.body));
         events.push(body);
         if (failSave) throw new TypeError("network");
+        const entryId = String(body.entry_id);
+        const inferredCategory = entryId.startsWith("word-")
+          ? "vocabulary"
+          : listeningById.has(entryId)
+            ? "listening"
+            : "reading";
         return json({
           correct: body.kind === "card" ? null : true,
           record: {
-            entry_id: body.entry_id,
-            category:
-              body.kind === "listening"
-                ? "listening"
-                : body.kind === "reading"
-                  ? "reading"
-                  : "vocabulary",
+            entry_id: entryId,
+            category: inferredCategory,
             status: body.kind === "card" ? body.rating : "mastered",
             attempts: body.kind === "card" ? 0 : 1,
             correct: body.kind === "card" ? 0 : 1,
@@ -83,17 +168,18 @@ beforeEach(() => {
                   entry_id: "word-0001",
                   category: "vocabulary",
                   status: "review",
-                  attempts: 2,
-                  correct: 1,
+                  attempts: 0,
+                  correct: 0,
                   updated_at: new Date().toISOString(),
                 },
               ]
             : [],
         });
-      throw new Error(`Unexpected request ${path}`);
+      throw new Error(`Unexpected request ${method} ${path}`);
     }),
   );
 });
+
 function open(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -101,7 +187,8 @@ function open(path: string) {
     </MemoryRouter>,
   );
 }
-it("protected progress routes to login, then returns to private progress and clears it on logout", async () => {
+
+it("protected progress routes to login, shows starred words tab with remove only, and clears on logout", async () => {
   open("/progress");
   await screen.findByRole("heading", { name: "歡迎回來" });
   fireEvent.change(screen.getByLabelText("電子信箱"), {
@@ -111,32 +198,42 @@ it("protected progress routes to login, then returns to private progress and cle
     target: { value: "a-long-test-password" },
   });
   fireEvent.click(screen.getByRole("button", { name: "登入" }));
-  await screen.findByRole("heading", { name: "我的學習進度" });
+  await screen.findByRole("heading", { name: "我的收藏與模考紀錄" });
   expect(
     screen.queryByRole("heading", { name: "匯入這個瀏覽器的舊進度" }),
   ).not.toBeInTheDocument();
+  expect(screen.queryByText("測驗正確率")).not.toBeInTheDocument();
   expect(await screen.findByText("company")).toBeInTheDocument();
   expect(screen.getAllByText(/公司；陪伴/).length).toBeGreaterThan(0);
+  expect(
+    screen.queryByRole("button", { name: /標記為已記住/ }),
+  ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "登出" }));
   await screen.findByRole("heading", { name: "歡迎回來" });
   expect(screen.queryByText("company")).not.toBeInTheDocument();
 });
-it("a failed save stays retryable and resends exactly the same event ID", async () => {
+
+it("a failed bookmark save stays retryable and resends exactly the same event ID", async () => {
   signedIn = true;
   failSave = true;
   open("/practice");
   fireEvent.click(
     await screen.findByRole("button", { name: "查看解釋與例句" }),
   );
-  fireEvent.click(screen.getByRole("button", { name: "記住了" }));
+  const starButtons = screen.getAllByRole("button", { name: /加入星號單字/ });
+  fireEvent.click(starButtons[0]);
   await screen.findByRole("button", { name: "重試" });
-  expect(screen.queryByText("已儲存到你的帳號。")).not.toBeInTheDocument();
   failSave = false;
   fireEvent.click(screen.getByRole("button", { name: "重試" }));
-  await screen.findByText("已儲存到你的帳號。");
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole("button", { name: /從星號單字移除/ }).length,
+    ).toBeGreaterThan(0),
+  );
   expect(events).toHaveLength(2);
   expect(events[0].event_id).toBe(events[1].event_id);
 });
+
 it("listening navigation opens the real page, plays 4 sequential segments, gates until end, and hides transcripts until answered", async () => {
   const utterances: SpeechSynthesisUtterance[] = [];
   vi.stubGlobal(
@@ -179,8 +276,9 @@ it("listening navigation opens the real page, plays 4 sequential segments, gates
   await waitFor(() => expect(option).toBeEnabled());
   fireEvent.click(option);
   expect(await screen.findByText(question.prompt)).toBeInTheDocument();
-  expect(events).toHaveLength(0); // Guest practice never writes account data.
+  expect(events).toHaveLength(0);
 });
+
 it("listening remains completable with English-only text fallback when speech errors or stops", async () => {
   const utterances: SpeechSynthesisUtterance[] = [];
   vi.stubGlobal(
@@ -212,7 +310,6 @@ it("listening remains completable with English-only text fallback when speech er
   const question = listening.entries.find(
     (row) => row.prompt === utterances[0].text,
   )!;
-  // Simulate browser synthesis failure (e.g. cloud TTS network error).
   utterances[0].onerror?.({ error: "network" } as SpeechSynthesisErrorEvent);
   await waitFor(() => expect(optionB).toBeEnabled());
   expect(screen.queryByText(question.prompt)).not.toBeInTheDocument();
@@ -226,6 +323,7 @@ it("listening remains completable with English-only text fallback when speech er
   fireEvent.click(optionB);
   expect(await screen.findByText(question.explanation)).toBeInTheDocument();
 });
+
 it("listening auto-unlocks with text fallback on unsupported browsers and falls back to bundled data when catalog API fails", async () => {
   failListeningCatalog = true;
   open("/listening");
@@ -243,41 +341,27 @@ it("listening auto-unlocks with text fallback on unsupported browsers and falls 
   fireEvent.click(optionA);
   expect(await screen.findByText("逐字稿與中文")).toBeInTheDocument();
 });
-it("stopping listening playback early offers unlock and text fallback, and signed-in answers save to account", async () => {
+
+it("answering listening or reading does not auto-save to important bank; user explicitly stars into important bank", async () => {
   signedIn = true;
-  const utterances: SpeechSynthesisUtterance[] = [];
-  vi.stubGlobal(
-    "SpeechSynthesisUtterance",
-    class {
-      text: string;
-      constructor(text: string) {
-        this.text = text;
-      }
-    },
-  );
-  Object.defineProperty(window, "speechSynthesis", {
-    configurable: true,
-    value: {
-      speak: (utterance: SpeechSynthesisUtterance) =>
-        utterances.push(utterance),
-      cancel: vi.fn(),
-      getVoices: () => [],
-    },
-  });
   open("/listening");
-  fireEvent.click(
-    await screen.findByRole("button", { name: "▶ 播放題目與 A／B／C" }),
-  );
-  fireEvent.click(screen.getByRole("button", { name: "■ 停止播放" }));
-  const optionC = screen.getByRole("button", { name: "C 回答 C" });
-  expect(optionC).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "直接選擇 A／B／C" }));
-  expect(optionC).toBeEnabled();
+  const optionC = await screen.findByRole("button", { name: "C 回答 C" });
   fireEvent.click(optionC);
-  await screen.findByText("已儲存到你的帳號。");
+  expect(await screen.findByText("逐字稿與中文")).toBeInTheDocument();
+  // Answering does NOT automatically push into important bank
+  expect(events).toHaveLength(0);
+  // Explicitly clicking star adds it to Important Bank
+  const starBtn = screen.getAllByRole("button", { name: /加入重要題庫/ })[0];
+  fireEvent.click(starBtn);
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole("button", { name: /從重要題庫移除/ }).length,
+    ).toBeGreaterThan(0),
+  );
   expect(events).toHaveLength(1);
-  expect(events[0]).toMatchObject({ kind: "listening", answer: "C" });
+  expect(events[0]).toMatchObject({ kind: "card", rating: "review" });
 });
+
 it("allows immediate one-click switch to English text while audio is stuck starting", async () => {
   vi.stubGlobal(
     "SpeechSynthesisUtterance",
@@ -307,6 +391,7 @@ it("allows immediate one-click switch to English text while audio is stuck start
   expect(screen.getByLabelText("題目與選項文字")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "A 回答 A" })).toBeEnabled();
 });
+
 it("library search finds English and Chinese and supports direct routes", async () => {
   open("/library");
   await screen.findByText("找到 1,000 個單字");
@@ -326,6 +411,7 @@ it("library search finds English and Chinese and supports direct routes", async 
     screen.queryByText("company", { exact: true }),
   ).not.toBeInTheDocument();
 });
+
 it("library star button toggles review/unseen progress, filters starred words, and retries failed saves", async () => {
   signedIn = true;
   open("/library");
@@ -380,6 +466,7 @@ it("library star button toggles review/unseen progress, filters starred words, a
     screen.queryByText("company", { exact: true }),
   ).not.toBeInTheDocument();
 });
+
 it("guest clicking star in library prompts login and returns to library after signing in", async () => {
   open("/library");
   await screen.findByText("找到 1,000 個單字");
@@ -404,6 +491,7 @@ it("guest clicking star in library prompts login and returns to library after si
     await screen.findByRole("button", { name: "取消標記 company 為不熟" }),
   ).toHaveTextContent("★");
 });
+
 it("displays cold-start guidance and keeps guest listening usable when API gateway returns 502", async () => {
   vi.stubGlobal(
     "fetch",
@@ -429,21 +517,17 @@ it("displays cold-start guidance and keeps guest listening usable when API gatew
     await screen.findByText(/已改用內建離線聽力題庫/),
   ).toBeInTheDocument();
 });
-it("progress review list shows word details directly and allows marking mastered or removing items", async () => {
+
+it("progress page manages starred words (remove only), important questions bank, and mock exam history", async () => {
   signedIn = true;
   open("/progress");
-  await screen.findByRole("heading", { name: "我的學習進度" });
+  await screen.findByRole("heading", { name: "我的收藏與模考紀錄" });
   expect(await screen.findByText("company")).toBeInTheDocument();
-  expect(screen.getAllByText(/公司；陪伴/).length).toBeGreaterThan(0);
   expect(
     screen.getByRole("button", { name: "聽 company 發音" }),
   ).toBeInTheDocument();
-  expect(
-    screen.getByRole("button", { name: "從待複習移除 company" }),
-  ).toBeInTheDocument();
-
   fireEvent.click(
-    screen.getByRole("button", { name: "將 company 標記為已記住" }),
+    screen.getByRole("button", { name: "從星號單字移除 company" }),
   );
   await waitFor(() =>
     expect(screen.queryByText("company")).not.toBeInTheDocument(),
@@ -451,14 +535,22 @@ it("progress review list shows word details directly and allows marking mastered
   expect(events[0]).toMatchObject({
     entry_id: "word-0001",
     kind: "card",
-    rating: "mastered",
+    rating: "unseen",
   });
+
+  // Switch to Important Questions Bank tab
+  fireEvent.click(screen.getByRole("tab", { name: /重要題庫/ }));
   expect(
-    screen.getByText(
-      "先開始練習，或在單字庫點擊 ★ 標記不熟的題目，都會出現在這裡。",
-    ),
+    await screen.findByRole("heading", { name: "重要題庫（聽力＋閱讀）" }),
+  ).toBeInTheDocument();
+
+  // Switch to Mock Exam History tab
+  fireEvent.click(screen.getByRole("tab", { name: /模擬考紀錄/ }));
+  expect(
+    await screen.findByRole("heading", { name: "模擬多益考試紀錄" }),
   ).toBeInTheDocument();
 });
+
 it("automatically wakes a sleeping backend via direct wake_url and recovers auth and offline catalog", async () => {
   const wakeUrl =
     "https://english-reps-api-staging-uvmg.onrender.com/api/v1/health/live";
@@ -507,40 +599,168 @@ it("automatically wakes a sleeping backend via direct wake_url and recovers auth
   );
   expect(directWakeCalls).toBe(1);
 });
-it("supports switching between TOEIC Listening Parts 1-4 and practicing Reading Parts 5-7", async () => {
+
+it("supports switching between TOEIC Listening Parts 1-4 and Reading Parts 5-7 and starring reading questions", async () => {
   signedIn = true;
   open("/listening");
   await screen.findByRole("button", { name: "A 回答 A" });
 
-  // Switch to Part 1 (圖片描述)
   fireEvent.click(screen.getByRole("tab", { name: /圖片描述/ }));
   expect(
     await screen.findByRole("img", { name: /Part 1/i }),
   ).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "D 回答 D" })).toBeInTheDocument();
 
-  // Switch to Part 3 (簡短對話)
   fireEvent.click(screen.getByRole("tab", { name: /簡短對話/ }));
   expect(
     await screen.findByText("聽雙人對話，選出題目的最佳答案"),
   ).toBeInTheDocument();
 
-  // Navigate to Reading Practice (閱讀練習)
   fireEvent.click(screen.getByRole("link", { name: "閱讀練習" }));
   expect(
     await screen.findByRole("heading", { name: "把多益閱讀，讀成直覺。" }),
   ).toBeInTheDocument();
 
-  // Part 5 is selected by default; switch to Part 6 (短文填空) and verify passage renders
   fireEvent.click(screen.getByRole("tab", { name: /短文填空/ }));
   expect(await screen.findByLabelText("閱讀文章")).toBeInTheDocument();
 
-  // Switch to Part 7 (閱讀理解), answer a question, and verify event is saved
   fireEvent.click(screen.getByRole("tab", { name: /閱讀理解/ }));
   expect(await screen.findByLabelText("閱讀文章")).toBeInTheDocument();
   const optionsGroup = screen.getByRole("group", { name: "選擇答案" });
   const firstChoice = optionsGroup.querySelector("button")!;
   fireEvent.click(firstChoice);
-  expect(await screen.findByText("已儲存到你的帳號。")).toBeInTheDocument();
-  expect(events[0]).toMatchObject({ kind: "reading", answer: "A" });
+  // Answering does not auto-save into important bank
+  expect(events).toHaveLength(0);
+  // Starring saves to important bank
+  fireEvent.click(screen.getAllByRole("button", { name: /加入重要題庫/ })[0]);
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole("button", { name: /從重要題庫移除/ }).length,
+    ).toBeGreaterThan(0),
+  );
+  expect(events[0]).toMatchObject({ kind: "card", rating: "review" });
+});
+
+it("supports full TOEIC Reading Mock Exam flow: start, flag, submit, review wrong + flagged, manually star to Important Bank, and delete", async () => {
+  signedIn = true;
+  open("/mock-exam");
+  await screen.findByRole("heading", { name: "模擬多益正式考試" });
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "開始閱讀模擬考（100 題）" }),
+  );
+  expect(await screen.findByText(/答題卡（1–100）/)).toBeInTheDocument();
+
+  // Answer question #1 and flag it for post-exam review (must NOT pollute Important Bank)
+  const choicesGroup = screen.getByRole("group", { name: "模擬考作答選項" });
+  fireEvent.click(choicesGroup.querySelector("button")!);
+  fireEvent.click(
+    screen.getByRole("button", { name: /標記本題（考後檢討）/ }),
+  );
+  expect(
+    await screen.findByRole("button", { name: /已標記（考後檢討）/ }),
+  ).toBeInTheDocument();
+  expect(events).toHaveLength(0);
+
+  // Submit mock exam
+  fireEvent.click(screen.getByRole("button", { name: "交卷計分" }));
+  fireEvent.click(await screen.findByRole("button", { name: "確定交卷" }));
+
+  expect(
+    await screen.findByRole("heading", { name: "閱讀模擬考成績與檢討" }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: /錯題＋標記/ })).toBeInTheDocument();
+  expect(
+    screen.getByRole("tab", { name: /只看考中標記 \(1\)/ }),
+  ).toBeInTheDocument();
+  // Wrong answers were NOT auto-added to Important Bank
+  expect(events).toHaveLength(0);
+
+  // Manually star one reviewed question into Important Bank
+  const reviewStarBtn = screen.getAllByRole("button", {
+    name: /加入重要題庫/,
+  })[0];
+  fireEvent.click(reviewStarBtn);
+  await waitFor(() => expect(events).toHaveLength(1));
+  expect(events[0]).toMatchObject({ kind: "card", rating: "review" });
+
+  // Delete the mock exam record
+  fireEvent.click(screen.getByRole("button", { name: "刪除這次測驗" }));
+  fireEvent.click(await screen.findByRole("button", { name: "確定刪除此紀錄" }));
+  expect(
+    await screen.findByRole("heading", { name: "模擬多益正式考試" }),
+  ).toBeInTheDocument();
+  expect(mockExamsDb).toHaveLength(0);
+});
+
+it("supports Listening Mock Exam single-play with safety escape hatch, pause/resume, and deleting in-progress exam", async () => {
+  signedIn = true;
+  const utterances: SpeechSynthesisUtterance[] = [];
+  vi.stubGlobal(
+    "SpeechSynthesisUtterance",
+    class {
+      text: string;
+      lang = "en-US";
+      constructor(text: string) {
+        this.text = text;
+      }
+    },
+  );
+  Object.defineProperty(window, "speechSynthesis", {
+    configurable: true,
+    value: {
+      speak: (utterance: SpeechSynthesisUtterance) =>
+        utterances.push(utterance),
+      cancel: vi.fn(),
+      getVoices: () => [],
+    },
+  });
+
+  open("/mock-exam");
+  await screen.findByRole("heading", { name: "模擬多益正式考試" });
+  fireEvent.click(
+    screen.getByRole("button", { name: "開始聽力模擬考（100 題）" }),
+  );
+  // Part 1 question #1 has photo and single-play button
+  expect(
+    await screen.findByRole("img", { name: /Part 1/i }),
+  ).toBeInTheDocument();
+  const playBtn = screen.getByRole("button", {
+    name: "▶ 播放本題音檔（限播一次）",
+  });
+  fireEvent.click(playBtn);
+  for (let step = 0; step < 4; step++) {
+    await waitFor(() => expect(utterances).toHaveLength(step + 1));
+    utterances[step].onend?.(new Event("end") as SpeechSynthesisEvent);
+  }
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "✓ 本段音檔已播放完畢（限播一次）" }),
+    ).toBeDisabled(),
+  );
+  // Emergency escape hatch is available after single play
+  expect(
+    screen.getByRole("button", { name: "語音異常？緊急重播一次" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "沒聽到聲音？顯示英文文字（防呆）" }),
+  ).toBeInTheDocument();
+
+  // Pause & save, verify it appears in "尚未完成的模擬測驗", then delete in-progress exam
+  fireEvent.click(screen.getByRole("button", { name: "暫停並保存" }));
+  expect(
+    await screen.findByRole("heading", { name: "尚未完成的模擬測驗" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "繼續作答" }),
+  ).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "刪除進度" }));
+  fireEvent.click(await screen.findByRole("button", { name: "確定刪除" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("heading", { name: "尚未完成的模擬測驗" }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(mockExamsDb).toHaveLength(0);
 });
