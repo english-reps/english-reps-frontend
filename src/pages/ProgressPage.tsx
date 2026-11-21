@@ -4,12 +4,16 @@ import { useAuth } from "../contexts/AuthContext";
 import { useProgress } from "../contexts/ProgressContext";
 import { SpeechPlayer } from "../domain/speech.js";
 import {
+  buildListeningSpeechSegments,
   createUuid,
   definition,
+  listeningPartMeta,
+  readingPartMeta,
   stats,
   topics,
   type Listening,
   type Progress,
+  type Reading,
   type Status,
   type StudyEvent,
   type Word,
@@ -18,12 +22,14 @@ import { errorMessage } from "../services/api";
 import { useCatalog } from "../services/catalog";
 import { ErrorNotice, Loading } from "../components/Common";
 import { WordDetails } from "../components/WordDetails";
+
 export function ProgressPage() {
   const auth = useAuth(),
     progress = useProgress(),
     location = useLocation();
   const vocabBank = useCatalog<Word>("vocabulary");
   const listeningBank = useCatalog<Listening>("listening");
+  const readingBank = useCatalog<Reading>("reading");
   const player = useMemo(() => {
     let synthesis, Utterance;
     try {
@@ -51,6 +57,9 @@ export function ProgressPage() {
   const wordsById = new Map(vocabBank.entries.map((word) => [word.id, word]));
   const listeningById = new Map(
     listeningBank.entries.map((item) => [item.id, item]),
+  );
+  const readingById = new Map(
+    readingBank.entries.map((item) => [item.id, item]),
   );
   const reviewRows = progress.records.filter((row) => row.status === "review");
   async function submitReviewEvent(event: StudyEvent) {
@@ -112,12 +121,12 @@ export function ProgressPage() {
         <section className="progress-panel">
           <h2>已掌握</h2>
           <strong>{summary.mastered}</strong>
-          <p>個單字與聽力題</p>
+          <p>個單字、聽力與閱讀題</p>
         </section>
         <section className="progress-panel">
           <h2>待複習</h2>
           <strong>{summary.review}</strong>
-          <p>個單字與聽力題</p>
+          <p>個單字、聽力與閱讀題</p>
         </section>
         <section className="progress-panel">
           <h2>測驗正確率</h2>
@@ -154,6 +163,7 @@ export function ProgressPage() {
               const saving = Boolean(pendingIds[row.entry_id]);
               const word = wordsById.get(row.entry_id);
               const question = listeningById.get(row.entry_id);
+              const readingItem = readingById.get(row.entry_id);
               const metaText =
                 row.attempts > 0
                   ? `作答 ${row.attempts} 次（答對 ${row.correct} 次）`
@@ -226,6 +236,8 @@ export function ProgressPage() {
                 );
               }
               if (row.category === "listening" && question) {
+                const qPart = question.part ?? 2;
+                const partInfo = listeningPartMeta[qPart];
                 return (
                   <div className="review-item-row" key={row.entry_id}>
                     <details className="word-row-details review-item-details">
@@ -240,10 +252,13 @@ export function ProgressPage() {
                           {question.prompt}
                         </strong>
                         <span className="list-pos">
+                          {partInfo.badge} ·{" "}
                           {topics[question.topic] || question.topic}
                         </span>
                         <span className="list-meaning">
-                          {question.promptZh}
+                          {question.promptZh ||
+                            question.audioTranslation ||
+                            question.explanation}
                           <small className="review-item-meta">
                             {" "}
                             · {metaText}
@@ -256,7 +271,8 @@ export function ProgressPage() {
                       <div className="word-row-content">
                         <div className="review-detail-toolbar">
                           <span className="word-source">
-                            聽力題 · {question.id.toUpperCase()} ·{" "}
+                            聽力題（{partInfo.shortTitle}）·{" "}
+                            {question.id.toUpperCase()} ·{" "}
                             {topics[question.topic] || question.topic} ·{" "}
                             {metaText}
                           </span>
@@ -264,28 +280,51 @@ export function ProgressPage() {
                             type="button"
                             className="audio-button"
                             onClick={() =>
-                              speak([
-                                question.prompt,
-                                ...question.options.map(
-                                  (option) => `${option.label}. ${option.text}`,
-                                ),
-                              ])
+                              speak(
+                                buildListeningSpeechSegments(question).segments,
+                              )
                             }
                             aria-label={`播放 ${question.id} 題目與選項`}
                           >
                             ♪ 播放題目
                           </button>
                         </div>
+                        {qPart === 1 && question.image && (
+                          <div className="part1-image-frame review-part1-image">
+                            <img
+                              src={question.image}
+                              alt={question.imageAlt || "Part 1 圖片描述照片"}
+                              className="part1-image"
+                            />
+                          </div>
+                        )}
                         <div className="listening-transcript review-listening-transcript">
+                          {(qPart === 3 || qPart === 4) &&
+                            question.audioText && (
+                              <div className="transcript-dialogue-block">
+                                <p className="transcript-prompt" lang="en">
+                                  {question.audioText}
+                                </p>
+                                {question.audioTranslation && (
+                                  <p className="example-zh">
+                                    {question.audioTranslation}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           {question.options.map((option) => (
                             <div
                               key={option.label}
                               className={`transcript-response ${option.label === question.answer ? "is-answer" : ""}`}
                             >
-                              <p>
+                              <p lang="en">
                                 {option.label}. {option.text}
                               </p>
-                              <p className="example-zh">{option.translation}</p>
+                              {option.translation && (
+                                <p className="example-zh">
+                                  {option.translation}
+                                </p>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -318,6 +357,95 @@ export function ProgressPage() {
                   </div>
                 );
               }
+              if (row.category === "reading" && readingItem) {
+                const partInfo = readingPartMeta[readingItem.part];
+                return (
+                  <div className="review-item-row" key={row.entry_id}>
+                    <details className="word-row-details review-item-details">
+                      <summary className="word-row-summary review-listening-summary">
+                        <span className="list-number">{readingItem.id}</span>
+                        <strong
+                          className="list-word review-listening-prompt"
+                          lang="en"
+                        >
+                          {readingItem.prompt}
+                        </strong>
+                        <span className="list-pos">
+                          {partInfo.badge} · {readingItem.topic}
+                        </span>
+                        <span className="list-meaning">
+                          {readingItem.promptZh || readingItem.explanation}
+                          <small className="review-item-meta">
+                            {" "}
+                            · {metaText}
+                          </small>
+                        </span>
+                        <span className="expand-icon" aria-hidden="true">
+                          +
+                        </span>
+                      </summary>
+                      <div className="word-row-content">
+                        <div className="review-detail-toolbar">
+                          <span className="word-source">
+                            閱讀題（{partInfo.shortTitle}）·{" "}
+                            {readingItem.id.toUpperCase()} · {readingItem.topic}{" "}
+                            · {metaText}
+                          </span>
+                        </div>
+                        {readingItem.passage && (
+                          <div
+                            className="reading-passage-body review-reading-passage"
+                            lang="en"
+                          >
+                            {readingItem.passage}
+                          </div>
+                        )}
+                        <div className="listening-transcript review-listening-transcript">
+                          {readingItem.options.map((option) => (
+                            <div
+                              key={option.label}
+                              className={`transcript-response ${option.label === readingItem.answer ? "is-answer" : ""}`}
+                            >
+                              <p lang="en">
+                                {option.label}. {option.text}
+                              </p>
+                              {option.translation && (
+                                <p className="example-zh">
+                                  {option.translation}
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="listening-explanation">
+                          <h3>解析</h3>
+                          <p>{readingItem.explanation}</p>
+                        </div>
+                      </div>
+                    </details>
+                    <div className="review-row-actions">
+                      <button
+                        type="button"
+                        className="button primary small"
+                        disabled={saving}
+                        aria-label={`將 ${readingItem.id} 標記為已記住`}
+                        onClick={() => updateReviewStatus(row, "mastered")}
+                      >
+                        已記住
+                      </button>
+                      <button
+                        type="button"
+                        className="button secondary small"
+                        disabled={saving}
+                        aria-label={`從待複習移除 ${readingItem.id}`}
+                        onClick={() => updateReviewStatus(row, "unseen")}
+                      >
+                        移除
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div
                   className="review-item-row review-item-fallback"
@@ -325,7 +453,11 @@ export function ProgressPage() {
                 >
                   <div className="review-fallback-title">
                     <strong>
-                      {row.category === "vocabulary" ? "單字" : "聽力"}{" "}
+                      {row.category === "vocabulary"
+                        ? "單字"
+                        : row.category === "reading"
+                          ? "閱讀"
+                          : "聽力"}{" "}
                       {row.entry_id}
                     </strong>
                     <span className="review-item-meta"> · {metaText}</span>

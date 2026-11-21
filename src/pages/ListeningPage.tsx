@@ -3,18 +3,19 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useProgress } from "../contexts/ProgressContext";
 import {
+  buildListeningSpeechSegments,
   createUuid,
-  shuffle,
+  listeningPartMeta,
+  pickGroupedSession,
   topics,
   type Listening,
+  type ListeningPart,
   type StudyEvent,
 } from "../domain/types";
 import { SpeechPlayer } from "../domain/speech.js";
 import { useCatalog } from "../services/catalog";
 import { errorMessage } from "../services/api";
 import { ErrorNotice, Loading, ProgressPanel } from "../components/Common";
-
-const stepLabels = ["題目", "選項 A", "選項 B", "選項 C"];
 
 function speechErrorMessage(code: string) {
   if (code === "unsupported")
@@ -35,35 +36,63 @@ export function ListeningPage() {
   const [generation, setGeneration] = useState(0);
   const bank = useCatalog<Listening>("listening"),
     progress = useProgress();
-  const [topic, setTopic] = useState("all"),
+  const [selectedPart, setSelectedPart] = useState<"all" | ListeningPart>(2),
+    [topic, setTopic] = useState("all"),
+    [difficulty, setDifficulty] = useState("all"),
     [review, setReview] = useState(false),
     [rate, setRate] = useState(1),
     [session, setSession] = useState<Listening[] | null>(null),
     [index, setIndex] = useState(0),
-    [results, setResults] = useState<{ id: string; correct: boolean }[]>([]);
+    [results, setResults] = useState<{ id: string; correct: boolean }[]>([]),
+    [heardGroups, setHeardGroups] = useState<Record<string, boolean>>({});
+
+  const partEntries = useMemo(
+    () =>
+      bank.entries.filter(
+        (row) => selectedPart === "all" || (row.part ?? 2) === selectedPart,
+      ),
+    [bank.entries, selectedPart],
+  );
+
+  const availableTopics = useMemo(
+    () => [...new Set(partEntries.map((row) => row.topic))],
+    [partEntries],
+  );
+
+  function filterPool() {
+    return partEntries.filter(
+      (row) =>
+        (topic === "all" || row.topic === topic) &&
+        (difficulty === "all" || (row.difficulty || "600") === difficulty) &&
+        (!review ||
+          progress.records.some(
+            (record) =>
+              record.entry_id === row.id && record.status === "review",
+          )),
+    );
+  }
+
   function begin(items?: Listening[]) {
     setGeneration((value) => value + 1);
-    setSession(
-      shuffle(
-        items ||
-          bank.entries.filter(
-            (row) =>
-              (topic === "all" || row.topic === topic) &&
-              (!review ||
-                progress.records.some(
-                  (record) =>
-                    record.entry_id === row.id && record.status === "review",
-                )),
-          ),
-      ).slice(0, 10),
-    );
+    setSession(pickGroupedSession(items || filterPool(), 10));
     setIndex(0);
     setResults([]);
+    setHeardGroups({});
   }
+
   useEffect(() => {
     if (bank.loading || bank.error) return;
     begin();
-  }, [bank.loading, bank.error, bank.entries, topic, review]);
+  }, [
+    bank.loading,
+    bank.error,
+    bank.entries,
+    selectedPart,
+    topic,
+    difficulty,
+    review,
+  ]);
+
   useEffect(() => {
     if (
       !bank.loading &&
@@ -73,14 +102,7 @@ export function ListeningPage() {
       session.length === 0 &&
       bank.entries.length > 0
     ) {
-      const hasReview = bank.entries.some(
-        (row) =>
-          (topic === "all" || row.topic === topic) &&
-          progress.records.some(
-            (record) =>
-              record.entry_id === row.id && record.status === "review",
-          ),
-      );
+      const hasReview = filterPool().length > 0;
       if (hasReview) begin();
     }
   }, [
@@ -89,17 +111,48 @@ export function ListeningPage() {
     progress.loading,
     progress.records,
     bank.entries,
+    selectedPart,
     topic,
+    difficulty,
     session?.length,
   ]);
+
   if (bank.loading) return <Loading />;
   if (bank.error)
     return <ErrorNotice message={bank.error} retry={bank.retry} />;
   if (session === null) return <Loading />;
+
   const reviewCount = progress.records.filter(
     (record) =>
       record.category === "listening" && record.status === "review",
   ).length;
+
+  const partCounts: Record<ListeningPart, number> = {
+    1: bank.entries.filter((row) => (row.part ?? 2) === 1).length,
+    2: bank.entries.filter((row) => (row.part ?? 2) === 2).length,
+    3: bank.entries.filter((row) => (row.part ?? 2) === 3).length,
+    4: bank.entries.filter((row) => (row.part ?? 2) === 4).length,
+  };
+
+  const currentMeta =
+    selectedPart === "all"
+      ? {
+          badge: "PARTS 1–4",
+          title: "全題型混合聽力",
+          subtitle: "涵蓋圖片描述、應答問題、簡短對話與簡短獨白",
+        }
+      : listeningPartMeta[selectedPart];
+
+  function selectPart(nextPart: "all" | ListeningPart) {
+    setSelectedPart(nextPart);
+    setTopic("all");
+  }
+
+  const currentQuestion = session[index];
+  const currentGroupHeard = Boolean(
+    currentQuestion?.groupId && heardGroups[currentQuestion.groupId],
+  );
+
   return (
     <>
       <div className="page-heading">
@@ -107,8 +160,8 @@ export function ListeningPage() {
           <p className="eyebrow">LISTEN A LITTLE EVERY DAY</p>
           <h1>讓英文，聽進日常。</h1>
           <p>
-            {bank.entries.length.toLocaleString()}{" "}
-            題自編應答練習，先聽，再回答。
+            共 {bank.entries.length.toLocaleString()}{" "}
+            題多益聽力練習（Part 1–4），選擇想練習的題型開始。
           </p>
         </div>
       </div>
@@ -120,9 +173,44 @@ export function ListeningPage() {
               retry={bank.retry}
             />
           )}
+          <div
+            className="part-selector"
+            role="tablist"
+            aria-label="多益聽力 Part 選擇"
+          >
+            {([1, 2, 3, 4] as ListeningPart[]).map((part) => {
+              const meta = listeningPartMeta[part];
+              const active = selectedPart === part;
+              return (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  key={part}
+                  className={`part-tab ${active ? "active" : ""}`}
+                  onClick={() => selectPart(part)}
+                >
+                  <span className="part-tab-badge">{meta.badge}</span>
+                  <strong>{meta.title}</strong>
+                  <small>{partCounts[part]} 題</small>
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={selectedPart === "all"}
+              className={`part-tab ${selectedPart === "all" ? "active" : ""}`}
+              onClick={() => selectPart("all")}
+            >
+              <span className="part-tab-badge">ALL PARTS</span>
+              <strong>全部混合</strong>
+              <small>{bank.entries.length} 題</small>
+            </button>
+          </div>
           <div className="study-toolbar">
             <span className="listening-section-label">
-              PART 2 STYLE<span>應答練習</span>
+              {currentMeta.badge} STYLE<span>{currentMeta.title}</span>
             </span>
             <button
               type="button"
@@ -137,18 +225,25 @@ export function ListeningPage() {
               練習主題
               <select value={topic} onChange={(e) => setTopic(e.target.value)}>
                 <option value="all">
-                  全部主題 · {bank.entries.length.toLocaleString()} 題
+                  全部主題 · {partEntries.length.toLocaleString()} 題
                 </option>
-                {[
-                  ...new Set([
-                    ...Object.keys(topics),
-                    ...bank.entries.map((row) => row.topic),
-                  ]),
-                ].map((key) => (
+                {availableTopics.map((key) => (
                   <option key={key} value={key}>
                     {topics[key] || key}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label>
+              難度分級
+              <select
+                value={difficulty}
+                onChange={(e) => setDifficulty(e.target.value)}
+              >
+                <option value="all">全部難度</option>
+                <option value="400">TOEIC 400+ 基礎</option>
+                <option value="600">TOEIC 600+ 核心</option>
+                <option value="800">TOEIC 800+ 進階</option>
               </select>
             </label>
             <label>
@@ -174,7 +269,7 @@ export function ListeningPage() {
           </div>
           <section className="study-panel">
             <div className="session-header">
-              <span>聽一句問句，選一個回答</span>
+              <span>{currentMeta.subtitle}</span>
               <span>
                 {Math.min(index + 1, session.length)} / {session.length}
               </span>
@@ -188,6 +283,7 @@ export function ListeningPage() {
                   className="button secondary"
                   onClick={() => {
                     setTopic("all");
+                    setDifficulty("all");
                     setReview(false);
                   }}
                 >
@@ -221,7 +317,8 @@ export function ListeningPage() {
                       begin(
                         session.filter((row) =>
                           results.some(
-                            (result) => result.id === row.id && !result.correct,
+                            (result) =>
+                              result.id === row.id && !result.correct,
                           ),
                         ),
                       )
@@ -233,18 +330,25 @@ export function ListeningPage() {
               </div>
             ) : (
               <ListeningExercise
-                key={`${generation}:${user?.id || "guest"}:${session[index].id}:${index}:${session.map((row) => row.id).join(",")}`}
-                question={session[index]}
+                key={`${generation}:${user?.id || "guest"}:${currentQuestion.id}:${index}:${session.map((row) => row.id).join(",")}`}
+                question={currentQuestion}
                 rate={rate}
+                initialGroupHeard={currentGroupHeard}
+                onGroupHeard={(groupId) =>
+                  setHeardGroups((prev) => ({ ...prev, [groupId]: true }))
+                }
                 next={(correct) => {
-                  setResults([...results, { id: session[index].id, correct }]);
+                  setResults([
+                    ...results,
+                    { id: currentQuestion.id, correct },
+                  ]);
                   setIndex(index + 1);
                 }}
               />
             )}
           </section>
           <p className="local-note">
-            自編練習，非 ETS 官方題目；使用裝置的英語合成語音。
+            原創多益仿真題庫，非 ETS 官方題目；使用裝置的英語合成語音。
           </p>
         </div>
         <ProgressPanel category="listening" total={bank.entries.length} />
@@ -252,17 +356,31 @@ export function ListeningPage() {
     </>
   );
 }
+
 function ListeningExercise({
   question,
   rate,
+  initialGroupHeard,
+  onGroupHeard,
   next,
 }: {
   question: Listening;
   rate: number;
+  initialGroupHeard: boolean;
+  onGroupHeard: (groupId: string) => void;
   next: (correct: boolean) => void;
 }) {
   const { user } = useAuth(),
     progress = useProgress();
+  const qPart: ListeningPart = question.part ?? 2;
+  const partInfo = listeningPartMeta[qPart];
+  const isPrintedOptionsPart = qPart === 3 || qPart === 4;
+
+  const speechData = useMemo(
+    () => buildListeningSpeechSegments(question),
+    [question],
+  );
+
   const player = useMemo(() => {
     let synthesis, Utterance;
     try {
@@ -271,11 +389,12 @@ function ListeningExercise({
     } catch {}
     return new SpeechPlayer({ synthesis, Utterance });
   }, []);
+
   const [playing, setPlaying] = useState(false),
     [playState, setPlayState] = useState(""),
     [playStep, setPlayStep] = useState(0),
-    [attempted, setAttempted] = useState(false),
-    [heard, setHeard] = useState(false),
+    [attempted, setAttempted] = useState(initialGroupHeard),
+    [heard, setHeard] = useState(initialGroupHeard),
     [showText, setShowText] = useState(false),
     [speechError, setSpeechError] = useState(""),
     [answer, setAnswer] = useState<string | null>(null),
@@ -283,6 +402,7 @@ function ListeningExercise({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [pending, setPending] = useState<StudyEvent | null>(null);
+
   useEffect(() => {
     function stop() {
       player.stop();
@@ -301,10 +421,12 @@ function ListeningExercise({
       window.removeEventListener("pagehide", stop);
     };
   }, [player, rate]);
+
   const canAnswer =
     heard || !player.supported || Boolean(speechError) || showText;
   const showFallbackText =
     answer === null && (showText || !player.supported);
+
   function play() {
     if (playing) {
       player.stop();
@@ -317,28 +439,26 @@ function ListeningExercise({
     setPlayStep(0);
     setPlayState("starting");
     setPlaying(true);
-    player.play(
-      [
-        question.prompt,
-        ...question.options.map((row) => `${row.label}. ${row.text}`),
-      ],
-      {
-        rate,
-        onState: (state) => setPlayState(state),
-        onStep: (step) => setPlayStep(step),
-        onComplete: () => {
-          setPlaying(false);
-          setPlayState("");
-          setHeard(true);
-        },
-        onError: (code) => {
-          setPlaying(false);
-          setPlayState("");
-          setSpeechError(speechErrorMessage(code));
-        },
+    player.play(speechData.segments, {
+      rate,
+      onState: (state) => setPlayState(state),
+      onStep: (step) => setPlayStep(step),
+      onComplete: () => {
+        setPlaying(false);
+        setPlayState("");
+        setHeard(true);
+        if (question.groupId) {
+          onGroupHeard(question.groupId);
+        }
       },
-    );
+      onError: (code) => {
+        setPlaying(false);
+        setPlayState("");
+        setSpeechError(speechErrorMessage(code));
+      },
+    });
   }
+
   async function save(event: StudyEvent) {
     if (!canAnswer || playing || busy || answer !== null) return;
     setBusy(true);
@@ -357,35 +477,98 @@ function ListeningExercise({
       setBusy(false);
     }
   }
+
+  const totalSteps = speechData.segments.length;
+  const currentStepLabel = speechData.labels[playStep] || "題目";
+  const optionLabelsText =
+    qPart === 2 ? "A、B 或 C" : "A、B、C 或 D";
+  const optionSlashText =
+    qPart === 2 ? "A／B／C" : "A／B／C／D";
+
+  const playButtonIdleLabel =
+    qPart === 1
+      ? "▶ 播放 A／B／C／D 四個敘述"
+      : qPart === 3
+        ? "▶ 播放對話與題目"
+        : qPart === 4
+          ? "▶ 播放獨白與題目"
+          : "▶ 播放題目與 A／B／C";
+
   const statusText = !player.supported
     ? "此瀏覽器不支援語音播放，已自動顯示英文題目與選項供直接作答。"
     : playing
       ? playState === "starting"
-        ? `正在準備英語語音（${stepLabels[playStep] || "題目"}）…`
-        : `正在播放：${stepLabels[playStep] || "題目"}（${playStep + 1} / 4）`
+        ? `正在準備英語語音（${currentStepLabel}）…`
+        : `正在播放：${currentStepLabel}（${playStep + 1} / ${totalSteps}）`
       : answer !== null
         ? "可搭配下方逐字稿，再聽一次題目與回答。"
         : speechError
-          ? "語音未能完整播放，可直接閱讀文字或點選 A、B、C 作答。"
+          ? `語音未能完整播放，可直接閱讀文字或點選 ${optionLabelsText} 作答。`
           : heard
-            ? "已可作答，請選擇回答。"
+            ? initialGroupHeard && !attempted
+              ? "同組音檔已播放過，可直接作答或再聽一次。"
+              : "已可作答，請選擇回答。"
             : attempted
               ? "播放已暫停，可重聽、顯示題目文字或直接選擇回答。"
-              : "按下播放開始，先聽一次後選擇 A、B 或 C。";
+              : `按下播放開始，先聽一次後選擇 ${optionLabelsText}。`;
+
   return (
     <div className="exercise-content">
       <div className="word-heading">
         <span className="word-number">
-          {question.id.toUpperCase()} · {topics[question.topic] || question.topic}
+          {question.id.toUpperCase()} ·{" "}
+          {topics[question.topic] || question.topic}
+          {question.difficulty ? ` · TOEIC ${question.difficulty}+` : ""}
         </span>
-        <span className="listening-type">自編應答題</span>
+        <span className="listening-type">
+          {partInfo.shortTitle}
+          {question.groupId ? ` · ${question.groupId}` : ""}
+        </span>
       </div>
+
+      {qPart === 1 && question.image && (
+        <figure className="part1-figure">
+          <div className="part1-image-frame">
+            <img
+              src={question.image}
+              alt={question.imageAlt || "Part 1 圖片描述照片"}
+              className="part1-image"
+            />
+          </div>
+          {question.imageCredit && (
+            <figcaption className="part1-credit">
+              Photo by{" "}
+              {question.imageSource ? (
+                <a
+                  href={question.imageSource}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {question.imageCredit}
+                </a>
+              ) : (
+                question.imageCredit
+              )}{" "}
+              (Pexels)
+            </figcaption>
+          )}
+        </figure>
+      )}
+
       <div className="listening-center">
         <div className="listening-emblem" aria-hidden="true">
           ♫
         </div>
         <p className="eyebrow">LISTEN FIRST. ANSWER NEXT.</p>
-        <h2>先聽，再選出最合適的回答</h2>
+        <h2>
+          {qPart === 1
+            ? "看圖片，聽四句敘述選出最符合的選項"
+            : qPart === 3
+              ? "聽雙人對話，選出題目的最佳答案"
+              : qPart === 4
+                ? "聽一段獨白或公告，選出題目的最佳答案"
+                : "先聽，再選出最合適的回答"}
+        </h2>
         <button
           type="button"
           className="button primary listening-play"
@@ -398,7 +581,7 @@ function ListeningExercise({
               ? "↻ 重試播放"
               : heard
                 ? "↻ 再聽一次"
-                : "▶ 播放題目與 A／B／C"}
+                : playButtonIdleLabel}
         </button>
         <p className="listening-audio-status" role="status">
           {statusText}
@@ -440,7 +623,7 @@ function ListeningExercise({
                     className="button secondary small"
                     onClick={() => setHeard(true)}
                   >
-                    直接選擇 A／B／C
+                    直接選擇 {optionSlashText}
                   </button>
                 )}
               </>
@@ -458,25 +641,46 @@ function ListeningExercise({
           </div>
         )}
       </div>
+
+      {isPrintedOptionsPart && (
+        <div className="listening-printed-prompt">
+          <span className="tiny-label">QUESTION</span>
+          <p className="transcript-prompt" lang="en">
+            {question.prompt}
+          </p>
+        </div>
+      )}
+
       {showFallbackText && (
         <div className="listening-fallback-text" aria-label="題目與選項文字">
-          <p className="transcript-prompt">{question.prompt}</p>
+          {isPrintedOptionsPart && question.audioText ? (
+            <p className="transcript-prompt" lang="en">
+              {question.audioText}
+            </p>
+          ) : (
+            <p className="transcript-prompt" lang="en">
+              {question.prompt}
+            </p>
+          )}
           <ul>
             {question.options.map((row) => (
-              <li key={row.label}>
+              <li key={row.label} lang="en">
                 {row.label}. {row.text}
               </li>
             ))}
           </ul>
         </div>
       )}
+
       <div className="listening-choices" role="group" aria-label="選擇回答">
         {question.options.map((option) => (
           <button
             type="button"
             key={option.label}
             className={`quiz-option listening-choice ${answer !== null && option.label === question.answer ? "correct" : ""} ${answer === option.label && !correct ? "incorrect" : ""}`}
-            disabled={!canAnswer || playing || busy || answer !== null || !!pending}
+            disabled={
+              !canAnswer || playing || busy || answer !== null || !!pending
+            }
             onClick={() =>
               void save({
                 event_id: createUuid(),
@@ -487,7 +691,9 @@ function ListeningExercise({
             }
           >
             <span className="option-letter">{option.label}</span>
-            {answer === null ? `回答 ${option.label}` : option.text}
+            {answer === null && !isPrintedOptionsPart
+              ? `回答 ${option.label}`
+              : option.text}
             {answer !== null && (
               <span className="option-result">
                 {option.label === question.answer
@@ -502,7 +708,8 @@ function ListeningExercise({
       </div>
       {answer === null && (
         <p className="card-hint listening-instruction">
-          先完整播放一次或開啟文字題目後，即可選擇 A、B 或 C；作答後會顯示中文逐字稿與解析。
+          先完整播放一次或開啟文字題目後，即可選擇 {optionLabelsText}
+          ；作答後會顯示中文逐字稿與解析。
         </p>
       )}
       {busy && <p role="status">正在儲存…</p>}
@@ -523,17 +730,33 @@ function ListeningExercise({
           </p>
           <div className="listening-transcript">
             <h3>逐字稿與中文</h3>
-            <p className="transcript-prompt">{question.prompt}</p>
-            <p className="example-zh">{question.promptZh}</p>
+            {isPrintedOptionsPart && question.audioText && (
+              <div className="transcript-dialogue-block">
+                <p className="transcript-prompt" lang="en">
+                  {question.audioText}
+                </p>
+                {question.audioTranslation && (
+                  <p className="example-zh">{question.audioTranslation}</p>
+                )}
+              </div>
+            )}
+            <p className="transcript-prompt" lang="en">
+              {question.prompt}
+            </p>
+            {question.promptZh && (
+              <p className="example-zh">{question.promptZh}</p>
+            )}
             {question.options.map((row) => (
               <div
                 key={row.label}
                 className={`transcript-response ${row.label === question.answer ? "is-answer" : ""}`}
               >
-                <p>
+                <p lang="en">
                   {row.label}. {row.text}
                 </p>
-                <p className="example-zh">{row.translation}</p>
+                {row.translation && (
+                  <p className="example-zh">{row.translation}</p>
+                )}
               </div>
             ))}
           </div>

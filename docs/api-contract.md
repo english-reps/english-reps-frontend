@@ -16,18 +16,19 @@ Mutations require exact configured Origin + X-CSRF-Token. Bootstrap csrf first; 
 | GET /auth/me | yes | `{id,email}` | shared account context |
 | POST /auth/logout | yes | 204, revoke session and clear cookies | shared header |
 | GET /catalog/vocabulary | no | `{entries: Vocabulary[]}` | practice/library |
-| GET /catalog/listening | no | `{entries: Listening[]}` | listening |
+| GET /catalog/listening | no | `{entries: Listening[]}` (optional `?part=1..4`) | listening |
+| GET /catalog/reading | no | `{entries: Reading[]}` (optional `?part=5..7`) | reading |
 | GET /progress | yes | `{records: Progress[]}` for current user only | all practice/progress |
-| POST /progress/events | yes | StudyEvent -> `{correct,record}` | cards/quizzes/listening/library |
+| POST /progress/events | yes | StudyEvent -> `{correct,record}` | cards/quizzes/listening/reading/library |
 
 User: `{id:UUID,email:string}`. Password length 12..128, email normalized/case-insensitive.
 Catalog preserves original shapes/IDs: vocabulary has id,word,senses[{pos,meaning}],example,
-translation,page,unit. Listening has id,topic,prompt,promptZh,options[{label,text,translation}],
-answer,explanation,keywords. Stable IDs are word-0001..word-1000 and listen-001..listen-030.
+translation,page,unit. Listening (Parts 1–4) and Reading (Parts 5–7) have id,part,topic,prompt,
+promptZh,options[{label,text,translation}],answer,explanation,keywords plus part-specific fields.
 
-Progress: `{entry_id,category:"vocabulary"|"listening",status:"mastered"|"review"|"unseen",
-attempts:int,correct:int,updated_at}`. Cards affect status, quizzes/listening also increment counters.
-StudyEvent: `{event_id:UUID,entry_id,kind:"card"|"quiz"|"listening",rating?:"mastered"|"review"|"unseen",
+Progress: `{entry_id,category:"vocabulary"|"listening"|"reading",status:"mastered"|"review"|"unseen",
+attempts:int,correct:int,updated_at}`. Cards affect status, quizzes/listening/reading also increment counters.
+StudyEvent: `{event_id:UUID,entry_id,kind:"card"|"quiz"|"listening"|"reading",rating?:"mastered"|"review"|"unseen",
 answer?:string}`. Card requires rating only, vocabulary quiz requires chosen vocabulary ID only,
-listening requires A/B/C only. Backend checks kind/item category and computes correctness.
+listening requires A/B/C (Part 2) or A/B/C/D (Parts 1,3,4), reading requires A/B/C/D. Backend checks kind/item category and computes correctness.
 Same event_id + same content returns unchanged grading plus current progress; changed content ->409.

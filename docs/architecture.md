@@ -25,7 +25,7 @@ Same-origin cookies and explicit Origin checks; no CORS middleware is needed.
 ## Data and privacy
 - users: UUID, normalized unique email, Argon2 password hash, creation time.
 - sessions: hashed opaque token, user FK, hashed CSRF token, expiry. Raw tokens are cookies only.
-- catalog files (`data/vocabulary.json`, `data/listening.json` in backend): stable word/listening IDs and content loaded and validated in memory by the API.
+- catalog files (`data/vocabulary.json`, `data/listening/part1..4.json`, `data/reading/part5..7.json` in backend): stable word/listening/reading IDs and content loaded and validated in memory by the API.
 - study_events: user + client event UUID, canonical request and server-graded result; immutable, idempotent.
 - progress: user + item, status, quiz attempts/correct count, updated time.
 User -> many sessions/events/progress; PostgreSQL stores only user accounts, sessions, auth rate limits and learning progress.
@@ -46,7 +46,8 @@ No private progress is put in localStorage.
 
 ## Pages
 - /practice: vocabulary cards/quizzes and mastery stats.
-- /listening: audible prompt + A/B/C, playback gate, transcript and review.
+- /listening: TOEIC Listening Parts 1–4 practice, playback gate, transcript and review.
+- /reading: TOEIC Reading Parts 5–7 practice, passages, explanations and review.
 - /library: searchable, paginated vocabulary with unit/part-of-speech/unfamiliar filters and star toggles.
 - /login, /register: credentials, validation, session creation.
 - /progress: private summary and wrong/starred review answers.
