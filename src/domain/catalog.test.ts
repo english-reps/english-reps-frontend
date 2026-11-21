@@ -3,12 +3,15 @@ import words from "../../data/vocabulary.json";
 import listening from "../../data/listening.js";
 import reading from "../../data/reading.json";
 import {
+  buildListeningGroupSpeechSegments,
   buildListeningSpeechSegments,
   buildLocalMockExam,
   choices,
   definition,
   gradeLocalMockExam,
+  groupItemsIntoUnits,
   pickGroupedSession,
+  pickUnitSession,
   stats,
   type Listening,
   type Reading,
@@ -42,14 +45,28 @@ it("retains all source words, listening Parts 1-4, and reading Parts 5-7 with un
       10,
     );
 });
-it("builds Part-specific speech segments and keeps grouped questions contiguous", () => {
+it("builds whole-group speech segments and keeps complete question units intact", () => {
   const p1 = listening.entries.find((row) => row.part === 1) as Listening;
-  const p3 = listening.entries.find((row) => row.part === 3) as Listening;
+  const p3Units = groupItemsIntoUnits(
+    listening.entries.filter((row) => row.part === 3) as Listening[],
+  );
+  expect(p3Units).toHaveLength(30);
+  expect(p3Units[0].items).toHaveLength(3);
   expect(buildListeningSpeechSegments(p1).segments).toHaveLength(4);
-  const p3Speech = buildListeningSpeechSegments(p3);
-  expect(p3Speech.segments.length).toBeGreaterThanOrEqual(2);
-  expect(p3Speech.segments[0]).not.toMatch(/^[WM]:/i);
-  expect(p3Speech.segments[p3Speech.segments.length - 1]).toBe(p3.prompt);
+  const p3GroupSpeech = buildListeningGroupSpeechSegments(p3Units[0].items);
+  expect(p3GroupSpeech.segments[0]).not.toMatch(/^[WM]:/i);
+  expect(p3GroupSpeech.segments.slice(-3)).toEqual(
+    p3Units[0].items.map((q, i) => `Question ${i + 1}. ${q.prompt}`),
+  );
+
+  // pickUnitSession never chops a Part 6 (4-question) group in half
+  const p6Session = pickUnitSession(
+    reading.entries.filter((row) => row.part === 6) as Reading[],
+    10,
+    () => 0.42,
+  );
+  expect(p6Session.every((unit) => unit.items.length === 4)).toBe(true);
+  expect(p6Session.length).toBe(3);
 
   const grouped = pickGroupedSession(
     listening.entries.filter((row) => row.part === 3) as Listening[],

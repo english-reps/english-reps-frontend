@@ -4,7 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { SpeechPlayer } from "../domain/speech.js";
 import {
   accentForMockKey,
-  buildListeningSpeechSegments,
+  buildListeningGroupSpeechSegments,
   buildLocalMockExam,
   formatCountdown,
   gradeLocalMockExam,
@@ -32,6 +32,60 @@ import { BookmarkButton } from "../components/BookmarkButton";
 import { ErrorNotice, Loading } from "../components/Common";
 
 const GUEST_STORAGE_KEY = "english-reps:guest-mock-exams";
+
+interface ExamUnit {
+  key: string;
+  groupId: string | null;
+  part: number;
+  startIndex: number;
+  endIndex: number;
+  questionIds: string[];
+  listeningItems: Listening[];
+  readingItems: Reading[];
+}
+
+function buildExamUnits(
+  exam: MockExam,
+  listeningById: Map<string, Listening>,
+  readingById: Map<string, Reading>,
+): ExamUnit[] {
+  const units: ExamUnit[] = [];
+  for (let idx = 0; idx < exam.question_ids.length; idx++) {
+    const id = exam.question_ids[idx];
+    const listeningItem =
+      exam.section === "listening" ? listeningById.get(id) : undefined;
+    const readingItem =
+      exam.section === "reading" ? readingById.get(id) : undefined;
+    const item = listeningItem || readingItem;
+    const gid = item?.groupId || null;
+    const part = item?.part ?? (exam.section === "listening" ? 2 : 5);
+    const prev = units[units.length - 1];
+    if (gid && prev && prev.groupId === gid) {
+      prev.endIndex = idx;
+      prev.questionIds.push(id);
+      if (listeningItem) prev.listeningItems.push(listeningItem);
+      if (readingItem) prev.readingItems.push(readingItem);
+    } else {
+      units.push({
+        key: gid || id,
+        groupId: gid,
+        part,
+        startIndex: idx,
+        endIndex: idx,
+        questionIds: [id],
+        listeningItems: listeningItem ? [listeningItem] : [],
+        readingItems: readingItem ? [readingItem] : [],
+      });
+    }
+  }
+  return units;
+}
+
+function questionRangeLabel(unit: ExamUnit): string {
+  return unit.startIndex === unit.endIndex
+    ? `第 ${unit.startIndex + 1} 題`
+    : `第 ${unit.startIndex + 1}–${unit.endIndex + 1} 題`;
+}
 
 function loadGuestExams(): MockExam[] {
   try {
@@ -126,7 +180,10 @@ export function MockExamPage() {
   const upsertExam = useCallback(
     (updated: MockExam) => {
       setExams((prev) => {
-        const next = [updated, ...prev.filter((item) => item.id !== updated.id)];
+        const next = [
+          updated,
+          ...prev.filter((item) => item.id !== updated.id),
+        ];
         if (!user) saveGuestExams(next);
         return next;
       });
@@ -254,7 +311,7 @@ export function MockExamPage() {
           <h1>模擬多益正式考試</h1>
           <p>
             比照新制多益正式考試規格，聽力（45 分鐘 / 100 題）與閱讀（75 分鐘 /
-            100 題）分開施測，每次隨機組題。
+            100 題）分開施測，Part 3、4、6、7 以整組同頁作答。
           </p>
         </div>
       </div>
@@ -292,9 +349,7 @@ export function MockExamPage() {
                 <div className="mock-history-card is-active" key={exam.id}>
                   <div className="mock-history-main">
                     <div className="mock-history-badges">
-                      <span
-                        className={`mock-section-pill is-${exam.section}`}
-                      >
+                      <span className={`mock-section-pill is-${exam.section}`}>
                         {exam.section === "listening"
                           ? "聽力模擬考"
                           : "閱讀模擬考"}
@@ -303,7 +358,7 @@ export function MockExamPage() {
                     </div>
                     <p className="mock-history-meta">
                       已作答 {answeredCount} / {exam.total_questions} 題 ·
-                      已標記 {exam.flagged_ids.length} 題 · 剩餘時間{" "}
+                      剩餘時間{" "}
                       <strong>{formatCountdown(exam.remaining_seconds)}</strong>
                     </p>
                     <small className="mock-history-date">
@@ -370,14 +425,14 @@ export function MockExamPage() {
               <strong>Part 2 應答問題</strong>：25 題（三選一，不顯示文字）
             </li>
             <li>
-              <strong>Part 3 簡短對話</strong>：39 題（13 組 × 3 題，四選一）
+              <strong>Part 3 簡短對話</strong>：13 組 × 3 題（共 39 題，整組同頁作答）
             </li>
             <li>
-              <strong>Part 4 簡短獨白</strong>：30 題（10 段 × 3 題，四選一）
+              <strong>Part 4 簡短獨白</strong>：10 段 × 3 題（共 30 題，整組同頁作答）
             </li>
           </ul>
           <p className="mock-card-note">
-            輪換美／英／澳／加四國口音，預設限播一次並保留語音異常防呆機制；作答中可加星號標記，考完與錯題一起檢討。
+            輪換美／英／澳／加四國口音，預設限播一次並保留語音異常防呆；作答中可標記整個題組，考完與錯題一起檢討。
           </p>
           <button
             type="button"
@@ -404,15 +459,14 @@ export function MockExamPage() {
               <strong>Part 5 句子填空</strong>：30 題（文法、詞性與商業字彙）
             </li>
             <li>
-              <strong>Part 6 段落填空</strong>：16 題（4 篇 × 4 題，含句子插入）
+              <strong>Part 6 段落填空</strong>：4 篇 × 4 題（共 16 題，整篇同頁作答）
             </li>
             <li>
-              <strong>Part 7 閱讀理解</strong>：54 題（單篇 29 題＋雙篇／三篇 25
-              題）
+              <strong>Part 7 閱讀理解</strong>：54 題（單篇 29 題＋多篇 25 題，整篇同頁作答）
             </li>
           </ul>
           <p className="mock-card-note">
-            75 分鐘內可自由切換題號與分配節奏；作答中可加星號標記不確定的題目，交卷後統一計分，再自行決定將哪些題目加入重要題庫。
+            75 分鐘內可自由切換題號與分配節奏；作答中可將不確定的整組加星號標記，交卷後統一計分，再自行決定是否整組加入重要題庫。
           </p>
           <button
             type="button"
@@ -460,8 +514,8 @@ export function MockExamPage() {
                     </span>
                   </div>
                   <p className="mock-history-meta">
-                    錯題／未答 {exam.wrong_ids?.length ?? 0} 題 · 考中標記{" "}
-                    {exam.flagged_ids.length} 題
+                    錯題／未答 {exam.wrong_ids?.length ?? 0} 小題 · 考中標記{" "}
+                    {exam.flagged_ids.length} 小題
                   </p>
                   <small className="mock-history-date">
                     完成時間：
@@ -533,7 +587,9 @@ function MockExamRunner({
   onPauseExit: () => void;
 }) {
   const [exam, setExam] = useState<MockExam>(initialExam);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveState, setSaveState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
   const [saveError, setSaveError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
@@ -542,7 +598,20 @@ function MockExamRunner({
     initialExam.section === "reading",
   );
 
-  // Listening playback states for current question
+  const units = useMemo(
+    () => buildExamUnits(exam, listeningById, readingById),
+    [exam.question_ids, exam.section, listeningById, readingById],
+  );
+
+  const currentUnitIndex = useMemo(() => {
+    const found = units.findIndex(
+      (u) => exam.current_index >= u.startIndex && exam.current_index <= u.endIndex,
+    );
+    return found >= 0 ? found : 0;
+  }, [exam.current_index, units]);
+
+  const currentUnit = units[currentUnitIndex];
+
   const player = useMemo(() => {
     let synthesis, Utterance;
     try {
@@ -625,7 +694,6 @@ function MockExamRunner({
     }
   }, [isSignedIn, listeningById, onExamChange, player, readingById]);
 
-  // Live countdown timer
   useEffect(() => {
     const timer = window.setInterval(() => {
       setExam((prev) => {
@@ -642,7 +710,6 @@ function MockExamRunner({
     return () => window.clearInterval(timer);
   }, [handleSubmit]);
 
-  // Periodic autosave every 20 seconds
   useEffect(() => {
     const interval = window.setInterval(() => {
       if (examRef.current.status === "in_progress") {
@@ -652,7 +719,6 @@ function MockExamRunner({
     return () => window.clearInterval(interval);
   }, [persistProgress]);
 
-  // Debounced autosave after mutations
   useEffect(() => {
     if (!dirtyRef.current) return;
     const timeout = window.setTimeout(() => {
@@ -667,7 +733,6 @@ function MockExamRunner({
     persistProgress,
   ]);
 
-  // Stop speech when switching questions or unmounting
   useEffect(() => {
     player.stop();
     setPlaying(false);
@@ -678,47 +743,29 @@ function MockExamRunner({
     return () => {
       player.stop();
     };
-  }, [exam.current_index, player]);
+  }, [currentUnit?.key, player]);
 
-  const currentId = exam.question_ids[exam.current_index];
-  const currentListening =
-    exam.section === "listening" ? listeningById.get(currentId) : undefined;
-  const currentReading =
-    exam.section === "reading" ? readingById.get(currentId) : undefined;
-  const currentItem = currentListening || currentReading;
-  const currentPart =
-    currentItem?.part ?? (exam.section === "listening" ? 2 : 5);
-  const currentAnswer = exam.answers[currentId];
-  const isFlagged = exam.flagged_ids.includes(currentId);
+  if (!currentUnit) return <Loading />;
+
+  const isMultiUnit = currentUnit.questionIds.length > 1;
+  const isUnitFlagged = currentUnit.questionIds.every((id) =>
+    exam.flagged_ids.includes(id),
+  );
   const answeredCount = Object.keys(exam.answers).length;
   const unansweredCount = exam.total_questions - answeredCount;
+  const flaggedUnitCount = units.filter((u) =>
+    u.questionIds.some((id) => exam.flagged_ids.includes(id)),
+  ).length;
 
-  // Group siblings (for Part 3/4/6/7 convenience banner)
-  const groupIndices = useMemo(() => {
-    const gid = currentItem?.groupId;
-    if (!gid) return [];
-    const indices: number[] = [];
-    exam.question_ids.forEach((id, idx) => {
-      const entry =
-        exam.section === "listening"
-          ? listeningById.get(id)
-          : readingById.get(id);
-      if (entry?.groupId === gid) indices.push(idx);
-    });
-    return indices;
-  }, [currentItem?.groupId, exam.question_ids, exam.section, listeningById, readingById]);
-
-  const audioKey = currentListening
-    ? currentListening.groupId || currentListening.id
-    : "";
+  const audioKey = currentUnit.key;
   const audioPlayed = Boolean(audioKey && exam.played_keys.includes(audioKey));
-  const currentAccent = accentForMockKey(audioKey || currentId);
+  const currentAccent = accentForMockKey(audioKey);
   const speechData = useMemo(
     () =>
-      currentListening
-        ? buildListeningSpeechSegments(currentListening)
+      exam.section === "listening" && currentUnit.listeningItems.length > 0
+        ? buildListeningGroupSpeechSegments(currentUnit.listeningItems)
         : { segments: [], labels: [] },
-    [currentListening],
+    [currentUnit.listeningItems, exam.section],
   );
 
   function updateExamState(updater: (prev: MockExam) => MockExam) {
@@ -730,32 +777,42 @@ function MockExamRunner({
     });
   }
 
-  function selectAnswer(label: string) {
+  function selectAnswer(questionId: string, label: string) {
     updateExamState((prev) => ({
       ...prev,
-      answers: { ...prev.answers, [currentId]: label },
+      answers: { ...prev.answers, [questionId]: label },
     }));
   }
 
-  function toggleFlag() {
+  function toggleUnitFlag() {
+    const ids = currentUnit.questionIds;
     updateExamState((prev) => {
-      const exists = prev.flagged_ids.includes(currentId);
+      const allFlagged = ids.every((id) => prev.flagged_ids.includes(id));
+      const nextFlags = allFlagged
+        ? prev.flagged_ids.filter((id) => !ids.includes(id))
+        : [...new Set([...prev.flagged_ids, ...ids])];
       return {
         ...prev,
-        flagged_ids: exists
-          ? prev.flagged_ids.filter((id) => id !== currentId)
-          : [...prev.flagged_ids, currentId],
+        flagged_ids: nextFlags,
       };
     });
   }
 
-  function goToIndex(nextIdx: number) {
-    const clamped = Math.max(0, Math.min(exam.question_ids.length - 1, nextIdx));
-    updateExamState((prev) => ({ ...prev, current_index: clamped }));
+  function goToUnit(nextUnitIdx: number) {
+    const clamped = Math.max(0, Math.min(units.length - 1, nextUnitIdx));
+    const targetStart = units[clamped].startIndex;
+    updateExamState((prev) => ({ ...prev, current_index: targetStart }));
+  }
+
+  function goToQuestionIndex(qIdx: number) {
+    const targetUnitIdx = units.findIndex(
+      (u) => qIdx >= u.startIndex && qIdx <= u.endIndex,
+    );
+    if (targetUnitIdx >= 0) goToUnit(targetUnitIdx);
   }
 
   function playCurrentAudio() {
-    if (!currentListening) return;
+    if (!currentUnit.listeningItems.length) return;
     if (playing) {
       player.stop();
       setPlaying(false);
@@ -798,8 +855,11 @@ function MockExamRunner({
   }
 
   const isLowTime = exam.remaining_seconds <= 300;
+  const firstListening = currentUnit.listeningItems[0];
+  const firstReading = currentUnit.readingItems[0];
   const isPrintedListening =
-    currentListening && (currentPart === 3 || currentPart === 4);
+    exam.section === "listening" &&
+    (currentUnit.part === 3 || currentUnit.part === 4);
 
   return (
     <section className="mock-runner">
@@ -809,12 +869,12 @@ function MockExamRunner({
             {exam.section === "listening" ? "聽力模擬考" : "閱讀模擬考"}
           </span>
           <span className="mock-part-indicator">
-            {partBadgeLabel(exam.section, currentPart)}
+            {partBadgeLabel(exam.section, currentUnit.part)}
           </span>
           <span className="mock-progress-text">
-            第 <strong>{exam.current_index + 1}</strong> /{" "}
+            <strong>{questionRangeLabel(currentUnit)}</strong> / 共{" "}
             {exam.total_questions} 題 · 已作答 {answeredCount} 題 · 標記{" "}
-            {exam.flagged_ids.length} 題
+            {flaggedUnitCount} 題組
           </span>
         </div>
         <div className="mock-topbar-right">
@@ -906,7 +966,7 @@ function MockExamRunner({
               {unansweredCount > 0
                 ? `（還有 ${unansweredCount} 題未作答，未答題將計為錯誤）`
                 : "（全部題目已作答）"}
-              。交卷後即可查看分數並一起檢討錯題與標記星號題。
+              。交卷後即可查看分數並一起檢討錯題與標記星號題組。
             </p>
           </div>
           <div className="mock-confirm-actions">
@@ -934,52 +994,39 @@ function MockExamRunner({
         <section className="study-panel mock-question-panel">
           <div className="session-header mock-question-header">
             <span>
-              第 {exam.current_index + 1} 題 ·{" "}
-              {partBadgeLabel(exam.section, currentPart)}
-              {currentItem?.groupId ? ` · 題組 ${currentItem.groupId}` : ""}
+              {questionRangeLabel(currentUnit)} ·{" "}
+              {partBadgeLabel(exam.section, currentUnit.part)}
+              {isMultiUnit
+                ? ` · 題組 ${currentUnit.groupId || currentUnit.key}（共 ${currentUnit.questionIds.length} 小題）`
+                : ""}
             </span>
             <button
               type="button"
-              className={`mock-flag-button ${isFlagged ? "is-flagged" : ""}`}
-              aria-pressed={isFlagged}
-              onClick={toggleFlag}
+              className={`mock-flag-button ${isUnitFlagged ? "is-flagged" : ""}`}
+              aria-pressed={isUnitFlagged}
+              onClick={toggleUnitFlag}
             >
-              <span aria-hidden="true">{isFlagged ? "★" : "☆"}</span>
+              <span aria-hidden="true">{isUnitFlagged ? "★" : "☆"}</span>
               <span>
-                {isFlagged ? "已標記（考後檢討）" : "標記本題（考後檢討）"}
+                {isUnitFlagged
+                  ? isMultiUnit
+                    ? "已標記本題組（考後檢討）"
+                    : "已標記（考後檢討）"
+                  : isMultiUnit
+                    ? "標記本題組（考後檢討）"
+                    : "標記本題（考後檢討）"}
               </span>
             </button>
           </div>
 
-          {groupIndices.length > 1 && (
-            <div className="mock-group-strip" role="group" aria-label="同題組子題">
-              <span>同題組題目：</span>
-              {groupIndices.map((idx, order) => {
-                const gidItemId = exam.question_ids[idx];
-                const isDone = Boolean(exam.answers[gidItemId]);
-                const isCurr = idx === exam.current_index;
-                return (
-                  <button
-                    type="button"
-                    key={gidItemId}
-                    className={`mock-group-pill ${isCurr ? "is-current" : ""} ${isDone ? "is-answered" : ""}`}
-                    onClick={() => goToIndex(idx)}
-                  >
-                    第 {idx + 1} 題（{order + 1}/{groupIndices.length}）
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {currentListening && (
+          {exam.section === "listening" && firstListening && (
             <div className="exercise-content">
-              {currentPart === 1 && currentListening.image && (
+              {currentUnit.part === 1 && firstListening.image && (
                 <figure className="part1-figure">
                   <div className="part1-image-frame">
                     <img
-                      src={currentListening.image}
-                      alt={currentListening.imageAlt || "Part 1 圖片描述照片"}
+                      src={firstListening.image}
+                      alt={firstListening.imageAlt || "Part 1 圖片描述照片"}
                       className="part1-image"
                     />
                   </div>
@@ -992,13 +1039,13 @@ function MockExamRunner({
                 </div>
                 <p className="eyebrow">OFFICIAL LISTENING SIMULATION</p>
                 <h2>
-                  {currentPart === 1
+                  {currentUnit.part === 1
                     ? "看圖片，聽四句敘述選出最符合的選項"
-                    : currentPart === 2
+                    : currentUnit.part === 2
                       ? "聽問句或陳述，選出最合適的回應"
-                      : currentPart === 3
-                        ? "聽簡短對話，回答下方題目"
-                        : "聽簡短獨白，回答下方題目"}
+                      : currentUnit.part === 3
+                        ? `聽簡短對話，同時作答下方第 ${currentUnit.startIndex + 1}–${currentUnit.endIndex + 1} 題`
+                        : `聽簡短獨白，同時作答下方第 ${currentUnit.startIndex + 1}–${currentUnit.endIndex + 1} 題`}
                 </h2>
                 <button
                   type="button"
@@ -1010,8 +1057,8 @@ function MockExamRunner({
                     ? "■ 停止播放"
                     : audioPlayed
                       ? "✓ 本段音檔已播放完畢（限播一次）"
-                      : currentPart === 3 || currentPart === 4
-                        ? "▶ 播放本組音檔（限播一次）"
+                      : isMultiUnit
+                        ? `▶ 播放本組音檔與 ${currentUnit.questionIds.length} 個問題（限播一次）`
                         : "▶ 播放本題音檔（限播一次）"}
                 </button>
                 <p className="listening-audio-status" role="status">
@@ -1022,7 +1069,7 @@ function MockExamRunner({
                         ? `正在準備語音（${speechData.labels[playStep] || "題目"}）…`
                         : `正在播放：${speechData.labels[playStep] || "題目"}（${playStep + 1} / ${speechData.segments.length}）`
                       : audioPlayed
-                        ? "本段音檔已播放完成，請選擇答案後前往下一題。"
+                        ? "本段音檔已播放完成，請確認答案後前往下一組。"
                         : "按下播放開始聽題；正式考預設每段音檔僅播放一次。"}
                 </p>
                 {speechError && (
@@ -1052,28 +1099,19 @@ function MockExamRunner({
                 </div>
               </div>
 
-              {isPrintedListening && (
-                <div className="listening-printed-prompt">
-                  <span className="tiny-label">QUESTION #{exam.current_index + 1}</span>
-                  <p className="transcript-prompt" lang="en">
-                    {currentListening.prompt}
-                  </p>
-                </div>
-              )}
-
               {(emergencyText || !player.supported) && (
                 <div
                   className="listening-fallback-text"
                   aria-label="防呆英文文字"
                 >
                   <p className="transcript-prompt" lang="en">
-                    {isPrintedListening && currentListening.audioText
-                      ? currentListening.audioText
-                      : currentListening.prompt}
+                    {isPrintedListening && firstListening.audioText
+                      ? firstListening.audioText
+                      : firstListening.prompt}
                   </p>
                   {!isPrintedListening && (
                     <ul>
-                      {currentListening.options.map((opt) => (
+                      {firstListening.options.map((opt) => (
                         <li key={opt.label} lang="en">
                           {opt.label}. {opt.text}
                         </li>
@@ -1083,72 +1121,196 @@ function MockExamRunner({
                 </div>
               )}
 
-              <div className="listening-choices" role="group" aria-label="模擬考作答選項">
-                {currentListening.options.map((option) => (
-                  <button
-                    type="button"
-                    key={option.label}
-                    className={`quiz-option listening-choice ${currentAnswer === option.label ? "is-selected" : ""}`}
-                    aria-pressed={currentAnswer === option.label}
-                    onClick={() => selectAnswer(option.label)}
-                  >
-                    <span className="option-letter">{option.label}</span>
-                    <span lang="en">
-                      {isPrintedListening
-                        ? option.text
-                        : `選項 ${option.label}`}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              {!isMultiUnit ? (
+                <div
+                  className="listening-choices"
+                  role="group"
+                  aria-label="模擬考作答選項"
+                >
+                  {firstListening.options.map((option) => (
+                    <button
+                      type="button"
+                      key={option.label}
+                      className={`quiz-option listening-choice ${exam.answers[firstListening.id] === option.label ? "is-selected" : ""}`}
+                      aria-pressed={
+                        exam.answers[firstListening.id] === option.label
+                      }
+                      onClick={() => selectAnswer(firstListening.id, option.label)}
+                    >
+                      <span className="option-letter">{option.label}</span>
+                      <span lang="en">
+                        {isPrintedListening
+                          ? option.text
+                          : `選項 ${option.label}`}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="group-questions-stack">
+                  {currentUnit.listeningItems.map((q, offset) => {
+                    const qNumber = currentUnit.startIndex + offset + 1;
+                    const chosen = exam.answers[q.id];
+                    return (
+                      <div className="group-subquestion-card" key={q.id}>
+                        <div className="group-subquestion-head">
+                          <span className="tiny-label">
+                            QUESTION #{qNumber}
+                          </span>
+                          {chosen && (
+                            <span className="mock-answered-pill">
+                              已選 {chosen}
+                            </span>
+                          )}
+                        </div>
+                        <p className="reading-prompt-text" lang="en">
+                          {q.prompt}
+                        </p>
+                        <div
+                          className="listening-choices group-sub-choices"
+                          role="group"
+                          aria-label={`第 ${qNumber} 題作答選項`}
+                        >
+                          {q.options.map((option) => (
+                            <button
+                              type="button"
+                              key={option.label}
+                              className={`quiz-option listening-choice ${chosen === option.label ? "is-selected" : ""}`}
+                              aria-pressed={chosen === option.label}
+                              onClick={() => selectAnswer(q.id, option.label)}
+                            >
+                              <span className="option-letter">
+                                {option.label}
+                              </span>
+                              <span lang="en">{option.text}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
-          {currentReading && (
+          {exam.section === "reading" && firstReading && (
             <div className="exercise-content">
-              {currentReading.passage && (
-                <article className="reading-passage" aria-label="模擬考閱讀文章">
-                  <div className="reading-passage-header">
+              {!isMultiUnit ? (
+                <>
+                  {firstReading.passage && (
+                    <article
+                      className="reading-passage"
+                      aria-label="模擬考閱讀文章"
+                    >
+                      <div className="reading-passage-header">
+                        <span className="tiny-label">PASSAGE · 閱讀文件</span>
+                      </div>
+                      <div className="reading-passage-body" lang="en">
+                        {firstReading.passage}
+                      </div>
+                    </article>
+                  )}
+                  <div className="reading-prompt-box">
                     <span className="tiny-label">
-                      {currentReading.part === 6
-                        ? "PASSAGE · 短文填空"
-                        : "PASSAGE · 閱讀文件"}
+                      QUESTION #{currentUnit.startIndex + 1}
                     </span>
-                    {currentReading.groupId && (
-                      <span className="reading-group-tag">
-                        題組 {currentReading.groupId}
-                      </span>
-                    )}
+                    <p className="reading-prompt-text" lang="en">
+                      {firstReading.prompt}
+                    </p>
                   </div>
-                  <div className="reading-passage-body" lang="en">
-                    {currentReading.passage}
-                  </div>
-                </article>
-              )}
-
-              <div className="reading-prompt-box">
-                <span className="tiny-label">
-                  QUESTION #{exam.current_index + 1}
-                </span>
-                <p className="reading-prompt-text" lang="en">
-                  {currentReading.prompt}
-                </p>
-              </div>
-
-              <div className="listening-choices" role="group" aria-label="模擬考作答選項">
-                {currentReading.options.map((option) => (
-                  <button
-                    type="button"
-                    key={option.label}
-                    className={`quiz-option listening-choice ${currentAnswer === option.label ? "is-selected" : ""}`}
-                    aria-pressed={currentAnswer === option.label}
-                    onClick={() => selectAnswer(option.label)}
+                  <div
+                    className="listening-choices"
+                    role="group"
+                    aria-label="模擬考作答選項"
                   >
-                    <span className="option-letter">{option.label}</span>
-                    <span lang="en">{option.text}</span>
-                  </button>
-                ))}
-              </div>
+                    {firstReading.options.map((option) => (
+                      <button
+                        type="button"
+                        key={option.label}
+                        className={`quiz-option listening-choice ${exam.answers[firstReading.id] === option.label ? "is-selected" : ""}`}
+                        aria-pressed={
+                          exam.answers[firstReading.id] === option.label
+                        }
+                        onClick={() =>
+                          selectAnswer(firstReading.id, option.label)
+                        }
+                      >
+                        <span className="option-letter">{option.label}</span>
+                        <span lang="en">{option.text}</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="group-reading-layout">
+                  {firstReading.passage && (
+                    <article
+                      className="reading-passage group-passage-pane"
+                      aria-label="模擬考閱讀文章"
+                    >
+                      <div className="reading-passage-header">
+                        <span className="tiny-label">
+                          {currentUnit.part === 6
+                            ? "PASSAGE · 短文填空"
+                            : "PASSAGE · 閱讀文件"}
+                        </span>
+                        <span className="reading-group-tag">
+                          {questionRangeLabel(currentUnit)}（
+                          {currentUnit.questionIds.length} 小題）
+                        </span>
+                      </div>
+                      <div className="reading-passage-body" lang="en">
+                        {firstReading.passage}
+                      </div>
+                    </article>
+                  )}
+
+                  <div className="group-questions-stack">
+                    {currentUnit.readingItems.map((q, offset) => {
+                      const qNumber = currentUnit.startIndex + offset + 1;
+                      const chosen = exam.answers[q.id];
+                      return (
+                        <div className="group-subquestion-card" key={q.id}>
+                          <div className="group-subquestion-head">
+                            <span className="tiny-label">
+                              QUESTION #{qNumber}
+                            </span>
+                            {chosen && (
+                              <span className="mock-answered-pill">
+                                已選 {chosen}
+                              </span>
+                            )}
+                          </div>
+                          <p className="reading-prompt-text" lang="en">
+                            {q.prompt}
+                          </p>
+                          <div
+                            className="listening-choices group-sub-choices"
+                            role="group"
+                            aria-label={`第 ${qNumber} 題作答選項`}
+                          >
+                            {q.options.map((option) => (
+                              <button
+                                type="button"
+                                key={option.label}
+                                className={`quiz-option listening-choice ${chosen === option.label ? "is-selected" : ""}`}
+                                aria-pressed={chosen === option.label}
+                                onClick={() => selectAnswer(q.id, option.label)}
+                              >
+                                <span className="option-letter">
+                                  {option.label}
+                                </span>
+                                <span lang="en">{option.text}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1156,18 +1318,23 @@ function MockExamRunner({
             <button
               type="button"
               className="button secondary"
-              disabled={exam.current_index === 0}
-              onClick={() => goToIndex(exam.current_index - 1)}
+              disabled={currentUnitIndex === 0}
+              onClick={() => goToUnit(currentUnitIndex - 1)}
             >
-              ← 上一題
+              {currentUnitIndex > 0 &&
+              units[currentUnitIndex - 1].questionIds.length > 1
+                ? "← 上一組"
+                : "← 上一題"}
             </button>
-            {exam.current_index < exam.total_questions - 1 ? (
+            {currentUnitIndex < units.length - 1 ? (
               <button
                 type="button"
                 className="button primary"
-                onClick={() => goToIndex(exam.current_index + 1)}
+                onClick={() => goToUnit(currentUnitIndex + 1)}
               >
-                下一題 →
+                {units[currentUnitIndex + 1].questionIds.length > 1
+                  ? "下一組 →"
+                  : "下一題 →"}
               </button>
             ) : (
               <button
@@ -1185,23 +1352,28 @@ function MockExamRunner({
           <aside className="study-panel mock-navigator" aria-label="題號導覽卡">
             <div className="mock-navigator-header">
               <h3>答題卡（1–{exam.total_questions}）</h3>
-              <small>綠＝已作答 · ★＝已標記</small>
+              <small>綠＝已作答 · ★＝已標記 · 點擊跳至該題組</small>
             </div>
             <div className="mock-navigator-grid">
               {exam.question_ids.map((id, idx) => {
                 const answered = Boolean(exam.answers[id]);
                 const flagged = exam.flagged_ids.includes(id);
-                const active = idx === exam.current_index;
+                const active =
+                  idx >= currentUnit.startIndex && idx <= currentUnit.endIndex;
                 return (
                   <button
                     type="button"
                     key={id}
                     className={`mock-nav-cell ${active ? "is-current" : ""} ${answered ? "is-answered" : ""} ${flagged ? "is-flagged" : ""}`}
                     aria-label={`跳至第 ${idx + 1} 題${answered ? "（已作答）" : "（未作答）"}${flagged ? "（已標記）" : ""}`}
-                    onClick={() => goToIndex(idx)}
+                    onClick={() => goToQuestionIndex(idx)}
                   >
                     {idx + 1}
-                    {flagged && <span className="nav-star" aria-hidden="true">★</span>}
+                    {flagged && (
+                      <span className="nav-star" aria-hidden="true">
+                        ★
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -1244,53 +1416,65 @@ function MockExamReview({
 
   useEffect(() => () => player.stop(), [player]);
 
-  const wrongSet = useMemo(() => new Set(exam.wrong_ids || []), [exam.wrong_ids]);
+  const wrongSet = useMemo(
+    () => new Set(exam.wrong_ids || []),
+    [exam.wrong_ids],
+  );
   const flaggedSet = useMemo(
     () => new Set(exam.flagged_ids || []),
     [exam.flagged_ids],
   );
 
-  const reviewItems = useMemo(() => {
-    return exam.question_ids
-      .map((id, idx) => ({
-        id,
-        number: idx + 1,
-        isWrong: wrongSet.has(id),
-        isFlagged: flaggedSet.has(id),
-        userAnswer: exam.answers[id] || null,
-        listening:
-          exam.section === "listening" ? listeningById.get(id) : undefined,
-        reading: exam.section === "reading" ? readingById.get(id) : undefined,
-      }))
-      .filter((item) => {
-        if (filter === "wrong") return item.isWrong;
-        if (filter === "flagged") return item.isFlagged;
-        if (filter === "review") return item.isWrong || item.isFlagged;
-        return true;
-      });
-  }, [
-    exam.answers,
-    exam.question_ids,
-    exam.section,
-    filter,
-    flaggedSet,
-    listeningById,
-    readingById,
-    wrongSet,
-  ]);
+  const units = useMemo(
+    () => buildExamUnits(exam, listeningById, readingById),
+    [exam, listeningById, readingById],
+  );
 
-  const combinedCount = exam.question_ids.filter(
-    (id) => wrongSet.has(id) || flaggedSet.has(id),
+  const annotatedUnits = useMemo(
+    () =>
+      units.map((unit) => {
+        const wrongCount = unit.questionIds.filter((id) =>
+          wrongSet.has(id),
+        ).length;
+        const isFlagged = unit.questionIds.some((id) => flaggedSet.has(id));
+        return {
+          unit,
+          wrongCount,
+          correctCount: unit.questionIds.length - wrongCount,
+          hasWrong: wrongCount > 0,
+          isFlagged,
+        };
+      }),
+    [flaggedSet, units, wrongSet],
+  );
+
+  const filteredUnits = useMemo(
+    () =>
+      annotatedUnits.filter((entry) => {
+        if (filter === "wrong") return entry.hasWrong;
+        if (filter === "flagged") return entry.isFlagged;
+        if (filter === "review") return entry.hasWrong || entry.isFlagged;
+        return true;
+      }),
+    [annotatedUnits, filter],
+  );
+
+  const combinedUnitCount = annotatedUnits.filter(
+    (entry) => entry.hasWrong || entry.isFlagged,
+  ).length;
+  const wrongUnitCount = annotatedUnits.filter((entry) => entry.hasWrong).length;
+  const flaggedUnitCount = annotatedUnits.filter(
+    (entry) => entry.isFlagged,
   ).length;
   const elapsedSeconds = Math.max(
     0,
     exam.duration_seconds - exam.remaining_seconds,
   );
 
-  function speakListening(item: Listening) {
+  function speakListeningUnit(unit: ExamUnit) {
     setSpeechError("");
-    const accent = accentForMockKey(item.groupId || item.id);
-    player.play(buildListeningSpeechSegments(item).segments, {
+    const accent = accentForMockKey(unit.key);
+    player.play(buildListeningGroupSpeechSegments(unit.listeningItems).segments, {
       accent: accent.code,
       onError: () => setSpeechError("此瀏覽器無法播放英語語音。"),
     });
@@ -1359,8 +1543,8 @@ function MockExamReview({
             {exam.scaled_score ?? "—"} <span>/ 495</span>
           </strong>
           <p>
-            答對 {exam.correct_count ?? 0} / {exam.total_questions} 題 ·
-            錯題／未答 {wrongSet.size} 題 · 考中標記 {flaggedSet.size} 題
+            答對 {exam.correct_count ?? 0} / {exam.total_questions} 小題 ·
+            錯題／未答 {wrongSet.size} 小題 · 考中標記 {flaggedUnitCount} 題組
           </p>
         </div>
         {exam.part_stats && exam.part_stats.length > 0 && (
@@ -1392,7 +1576,7 @@ function MockExamReview({
               className={filter === "review" ? "selected" : ""}
               onClick={() => setFilter("review")}
             >
-              錯題＋標記 ({combinedCount})
+              錯題＋標記 ({combinedUnitCount})
             </button>
             <button
               type="button"
@@ -1401,7 +1585,7 @@ function MockExamReview({
               className={filter === "wrong" ? "selected" : ""}
               onClick={() => setFilter("wrong")}
             >
-              只看錯題 ({wrongSet.size})
+              只看錯題 ({wrongUnitCount})
             </button>
             <button
               type="button"
@@ -1410,7 +1594,7 @@ function MockExamReview({
               className={filter === "flagged" ? "selected" : ""}
               onClick={() => setFilter("flagged")}
             >
-              只看考中標記 ({flaggedSet.size})
+              只看考中標記 ({flaggedUnitCount})
             </button>
             <button
               type="button"
@@ -1419,166 +1603,203 @@ function MockExamReview({
               className={filter === "all" ? "selected" : ""}
               onClick={() => setFilter("all")}
             >
-              全部 ({exam.total_questions})
+              全部 ({units.length})
             </button>
           </div>
           <p className="mock-review-hint">
-            錯題不會自動存入重要題庫；需要長期複習的題目，請點擊該題右側的 ★
-            自行加入「重要題庫」。
+            錯題不會自動存入重要題庫；需要長期複習的題目或題組，請點擊右上角的 ★
+            自行整組加入「重要題庫」。
           </p>
         </div>
 
         {speechError && <p role="alert">{speechError}</p>}
 
-        {!reviewItems.length ? (
+        {!filteredUnits.length ? (
           <p className="review-empty-note">這個篩選條件下沒有題目。</p>
         ) : (
           <div className="mock-review-list">
-            {reviewItems.map((entry) => {
-              const item = entry.listening || entry.reading;
-              if (!item) return null;
-              const part =
-                item.part ?? (exam.section === "listening" ? 2 : 5);
+            {filteredUnits.map(({ unit, wrongCount, correctCount, isFlagged }) => {
+              const isMulti = unit.questionIds.length > 1;
+              const firstL = unit.listeningItems[0];
+              const firstR = unit.readingItems[0];
+              const items: (Listening | Reading)[] =
+                exam.section === "listening"
+                  ? unit.listeningItems
+                  : unit.readingItems;
+              if (!items.length) return null;
+
               return (
-                <article className="mock-review-card" key={entry.id}>
+                <article className="mock-review-card" key={unit.key}>
                   <div className="mock-review-card-header">
                     <div className="mock-review-card-meta">
-                      <span className="mock-review-num">#{entry.number}</span>
+                      <span className="mock-review-num">
+                        {questionRangeLabel(unit)}
+                      </span>
                       <span className="mock-part-indicator">
-                        {partBadgeLabel(exam.section, part)}
+                        {partBadgeLabel(exam.section, unit.part)}
                       </span>
                       <span
-                        className={`mock-verdict-pill ${entry.isWrong ? "is-wrong" : "is-correct"}`}
+                        className={`mock-verdict-pill ${wrongCount > 0 ? "is-wrong" : "is-correct"}`}
                       >
-                        {!entry.userAnswer
-                          ? "未作答"
-                          : entry.isWrong
-                            ? `答錯（你選 ${entry.userAnswer}）`
-                            : `✓ 答對（${entry.userAnswer}）`}
+                        {isMulti
+                          ? `答對 ${correctCount} / ${unit.questionIds.length} 小題`
+                          : wrongCount > 0
+                            ? exam.answers[unit.questionIds[0]]
+                              ? `答錯（你選 ${exam.answers[unit.questionIds[0]]}）`
+                              : "未作答"
+                            : `✓ 答對（${exam.answers[unit.questionIds[0]]}）`}
                       </span>
-                      {entry.isFlagged && (
+                      {isFlagged && (
                         <span className="mock-flagged-pill">★ 考中標記</span>
                       )}
                     </div>
                     <BookmarkButton
-                      entryId={entry.id}
+                      entryIds={unit.questionIds}
                       category={exam.section}
-                      itemLabel={`第 ${entry.number} 題 (${entry.id})`}
+                      itemLabel={`${questionRangeLabel(unit)} (${unit.groupId || unit.key})`}
                       compact
                     />
                   </div>
 
-                  {entry.listening && (
+                  {firstL && (
                     <div className="mock-review-body">
                       <div className="review-detail-toolbar">
                         <span className="word-source">
-                          {entry.listening.id} ·{" "}
-                          {topics[entry.listening.topic] ||
-                            entry.listening.topic}
+                          {unit.groupId || firstL.id} ·{" "}
+                          {topics[firstL.topic] || firstL.topic}
                         </span>
                         <button
                           type="button"
                           className="audio-button"
-                          onClick={() => speakListening(entry.listening!)}
+                          onClick={() => speakListeningUnit(unit)}
                         >
-                          ♪ 重聽本題
+                          ♪ {isMulti ? "重聽整組音檔" : "重聽本題"}
                         </button>
                       </div>
-                      {part === 1 && entry.listening.image && (
+                      {unit.part === 1 && firstL.image && (
                         <div className="part1-image-frame review-part1-image">
                           <img
-                            src={entry.listening.image}
-                            alt={
-                              entry.listening.imageAlt || "Part 1 圖片描述照片"
-                            }
+                            src={firstL.image}
+                            alt={firstL.imageAlt || "Part 1 圖片描述照片"}
                             className="part1-image"
                           />
                         </div>
                       )}
-                      {(part === 3 || part === 4) &&
-                        entry.listening.audioText && (
+                      {(unit.part === 3 || unit.part === 4) &&
+                        firstL.audioText && (
                           <div className="transcript-dialogue-block">
                             <p className="transcript-prompt" lang="en">
-                              {entry.listening.audioText}
+                              {firstL.audioText}
                             </p>
-                            {entry.listening.audioTranslation && (
+                            {firstL.audioTranslation && (
                               <p className="example-zh">
-                                {entry.listening.audioTranslation}
+                                {firstL.audioTranslation}
                               </p>
                             )}
                           </div>
                         )}
-                      <p className="transcript-prompt" lang="en">
-                        {entry.listening.prompt}
-                      </p>
-                      {entry.listening.promptZh && (
-                        <p className="example-zh">{entry.listening.promptZh}</p>
-                      )}
                     </div>
                   )}
 
-                  {entry.reading && (
+                  {firstR && (
                     <div className="mock-review-body">
                       <span className="word-source">
-                        {entry.reading.id} · {entry.reading.topic}
+                        {unit.groupId || firstR.id} · {firstR.topic}
                       </span>
-                      {entry.reading.passage && (
+                      {firstR.passage && (
                         <div
                           className="reading-passage-body review-reading-passage"
                           lang="en"
                         >
-                          {entry.reading.passage}
+                          {firstR.passage}
                         </div>
-                      )}
-                      <p className="transcript-prompt" lang="en">
-                        {entry.reading.prompt}
-                      </p>
-                      {entry.reading.promptZh && (
-                        <p className="example-zh">{entry.reading.promptZh}</p>
                       )}
                     </div>
                   )}
 
-                  <div className="listening-transcript review-listening-transcript">
-                    {item.options.map((opt) => {
-                      const isCorrectOpt = opt.label === item.answer;
-                      const isUserWrong =
-                        entry.userAnswer === opt.label && !isCorrectOpt;
+                  <div className="mock-review-sublist">
+                    {items.map((item, offset) => {
+                      const qNum = unit.startIndex + offset + 1;
+                      const userAnswer = exam.answers[item.id] || null;
+                      const isWrong = wrongSet.has(item.id);
+                      const readingItem =
+                        exam.section === "reading"
+                          ? (item as Reading)
+                          : undefined;
                       return (
                         <div
-                          key={opt.label}
-                          className={`transcript-response ${isCorrectOpt ? "is-answer" : ""} ${isUserWrong ? "is-user-wrong" : ""}`}
+                          className={
+                            isMulti ? "mock-review-subcard" : "mock-review-single"
+                          }
+                          key={item.id}
                         >
-                          <p lang="en">
-                            {opt.label}. {opt.text}
-                            {isCorrectOpt && " ✓ 正解"}
-                            {isUserWrong && " ✗ 你的作答"}
-                          </p>
-                          {opt.translation && (
-                            <p className="example-zh">{opt.translation}</p>
+                          {isMulti && (
+                            <div className="group-subquestion-head">
+                              <span className="tiny-label">
+                                第 {qNum} 題（{item.id}）
+                              </span>
+                              <span
+                                className={`mock-verdict-pill ${isWrong ? "is-wrong" : "is-correct"}`}
+                              >
+                                {!userAnswer
+                                  ? "未作答"
+                                  : isWrong
+                                    ? `答錯（你選 ${userAnswer}）`
+                                    : `✓ 答對（${userAnswer}）`}
+                              </span>
+                            </div>
                           )}
+                          <p className="transcript-prompt" lang="en">
+                            {item.prompt}
+                          </p>
+                          {item.promptZh && (
+                            <p className="example-zh">{item.promptZh}</p>
+                          )}
+                          <div className="listening-transcript review-listening-transcript">
+                            {item.options.map((opt) => {
+                              const isCorrectOpt = opt.label === item.answer;
+                              const isUserWrong =
+                                userAnswer === opt.label && !isCorrectOpt;
+                              return (
+                                <div
+                                  key={opt.label}
+                                  className={`transcript-response ${isCorrectOpt ? "is-answer" : ""} ${isUserWrong ? "is-user-wrong" : ""}`}
+                                >
+                                  <p lang="en">
+                                    {opt.label}. {opt.text}
+                                    {isCorrectOpt && " ✓ 正解"}
+                                    {isUserWrong && " ✗ 你的作答"}
+                                  </p>
+                                  {opt.translation && (
+                                    <p className="example-zh">
+                                      {opt.translation}
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="listening-explanation">
+                            <h3>解析</h3>
+                            <p>{item.explanation}</p>
+                            {readingItem?.evidence && (
+                              <div className="reading-evidence">
+                                <strong>
+                                  關鍵證據句
+                                  {readingItem.evidenceLocation
+                                    ? `（${readingItem.evidenceLocation}）`
+                                    : ""}
+                                  ：
+                                </strong>
+                                <blockquote lang="en">
+                                  {readingItem.evidence}
+                                </blockquote>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
-                  </div>
-
-                  <div className="listening-explanation">
-                    <h3>解析</h3>
-                    <p>{item.explanation}</p>
-                    {entry.reading?.evidence && (
-                      <div className="reading-evidence">
-                        <strong>
-                          關鍵證據句
-                          {entry.reading.evidenceLocation
-                            ? `（${entry.reading.evidenceLocation}）`
-                            : ""}
-                          ：
-                        </strong>
-                        <blockquote lang="en">
-                          {entry.reading.evidence}
-                        </blockquote>
-                      </div>
-                    )}
                   </div>
                 </article>
               );

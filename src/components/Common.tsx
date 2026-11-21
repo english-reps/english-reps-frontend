@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import type { Category } from "../domain/types";
+import { groupItemsIntoUnits, type Category } from "../domain/types";
 import { useProgress } from "../contexts/ProgressContext";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -33,12 +33,19 @@ export function Loading() {
 export function CollectionPanel({
   category,
   total,
+  entries,
 }: {
   category: Category;
   total?: number;
+  entries?: { id: string; groupId?: string | null }[];
 }) {
   const { records, loading, error, refresh } = useProgress();
   const { user } = useAuth();
+  const starredIds = new Set(
+    records
+      .filter((row) => row.status === "review")
+      .map((row) => row.entry_id),
+  );
   const starredVocab = records.filter(
     (row) => row.category === "vocabulary" && row.status === "review",
   ).length;
@@ -49,11 +56,17 @@ export function CollectionPanel({
     (row) => row.category === "reading" && row.status === "review",
   ).length;
   const isVocab = category === "vocabulary";
-  const currentCount = isVocab
-    ? starredVocab
-    : category === "listening"
-      ? starredListening
-      : starredReading;
+
+  const currentUnitCount = entries
+    ? groupItemsIntoUnits(entries).filter((unit) =>
+        unit.items.some((item) => starredIds.has(item.id)),
+      ).length
+    : isVocab
+      ? starredVocab
+      : category === "listening"
+        ? starredListening
+        : starredReading;
+
   const totalBankCount =
     total ??
     (category === "vocabulary" ? 1000 : category === "reading" ? 805 : 332);
@@ -66,13 +79,13 @@ export function CollectionPanel({
           <span className="tiny-label">BOOKMARKS</span>
         </div>
         <div className="collection-highlight">
-          <strong>{currentCount}</strong>
+          <strong>{currentUnitCount}</strong>
           <span>
             {isVocab
               ? "個已加星號的單字"
               : category === "listening"
-                ? "題已存重要聽力題"
-                : "題已存重要閱讀題"}
+                ? "題／組已存重要聽力"
+                : "題／組已存重要閱讀"}
           </span>
         </div>
         <div className="stats collection-stats">
@@ -85,7 +98,7 @@ export function CollectionPanel({
             <strong>{starredVocab}</strong>
           </div>
           <div>
-            <span>重要聽讀</span>
+            <span>重要聽讀小題</span>
             <strong>{starredListening + starredReading}</strong>
           </div>
         </div>
@@ -102,7 +115,7 @@ export function CollectionPanel({
         </div>
         <p className="local-note">
           {user ? (
-            "點擊 ★ 即可主動收藏，不會自動加入答錯題目。"
+            "點擊 ★ 即可將整題／整組加入收藏，不會自動加入答錯題目。"
           ) : (
             <Link to="/login">登入以跨裝置儲存星號與模考紀錄</Link>
           )}
@@ -113,7 +126,9 @@ export function CollectionPanel({
       <section className="note-panel">
         <p className="eyebrow">ACTIVE CURATION</p>
         <h2>只留你真正想複習的。</h2>
-        <p>練習遇到不熟的單字或關鍵考題時按下 ★，集中到個人清單反覆精練。</p>
+        <p>
+          練習遇到關鍵題目或題組時按下 ★，整組連同文章與全部小題都會收進重要題庫。
+        </p>
       </section>
     </aside>
   );

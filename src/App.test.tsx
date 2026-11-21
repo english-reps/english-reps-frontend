@@ -600,7 +600,7 @@ it("automatically wakes a sleeping backend via direct wake_url and recovers auth
   expect(directWakeCalls).toBe(1);
 });
 
-it("supports switching between TOEIC Listening Parts 1-4 and Reading Parts 5-7 and starring reading questions", async () => {
+it("supports whole-group display and whole-group starring for Listening Part 3 and Reading Part 6/7", async () => {
   signedIn = true;
   open("/listening");
   await screen.findByRole("button", { name: "A 回答 A" });
@@ -611,37 +611,54 @@ it("supports switching between TOEIC Listening Parts 1-4 and Reading Parts 5-7 a
   ).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "D 回答 D" })).toBeInTheDocument();
 
+  // Part 3 shows all 3 sub-questions of the conversation together on one screen
   fireEvent.click(screen.getByRole("tab", { name: /簡短對話/ }));
   expect(
-    await screen.findByText("聽雙人對話，選出題目的最佳答案"),
+    await screen.findByText(/聽一段雙人對話，完成下方 3 個問題/),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("group", { name: "第 1 小題選項" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("group", { name: "第 3 小題選項" }),
   ).toBeInTheDocument();
 
+  // Navigate to Reading Practice
   fireEvent.click(screen.getByRole("link", { name: "閱讀練習" }));
   expect(
     await screen.findByRole("heading", { name: "把多益閱讀，讀成直覺。" }),
   ).toBeInTheDocument();
 
+  // Part 6 shows passage + all 4 sub-questions together on one screen
   fireEvent.click(screen.getByRole("tab", { name: /短文填空/ }));
   expect(await screen.findByLabelText("閱讀文章")).toBeInTheDocument();
+  expect(
+    screen.getByRole("group", { name: "第 1 小題選項" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("group", { name: "第 4 小題選項" }),
+  ).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole("tab", { name: /閱讀理解/ }));
-  expect(await screen.findByLabelText("閱讀文章")).toBeInTheDocument();
-  const optionsGroup = screen.getByRole("group", { name: "選擇答案" });
-  const firstChoice = optionsGroup.querySelector("button")!;
-  fireEvent.click(firstChoice);
-  // Answering does not auto-save into important bank
-  expect(events).toHaveLength(0);
-  // Starring saves to important bank
-  fireEvent.click(screen.getAllByRole("button", { name: /加入重要題庫/ })[0]);
-  await waitFor(() =>
-    expect(
-      screen.getAllByRole("button", { name: /從重要題庫移除/ }).length,
-    ).toBeGreaterThan(0),
+  // Select all 4 sub-questions and submit the whole group; answering does not auto-star
+  for (let i = 1; i <= 4; i++) {
+    const groupEl = screen.getByRole("group", { name: `第 ${i} 小題選項` });
+    fireEvent.click(groupEl.querySelector("button")!);
+  }
+  fireEvent.click(
+    screen.getByRole("button", { name: "送出本題組答案（對答案）" }),
   );
-  expect(events[0]).toMatchObject({ kind: "card", rating: "review" });
+  expect(await screen.findByText(/本篇答對/)).toBeInTheDocument();
+  expect(events).toHaveLength(0);
+
+  // Clicking whole-group star saves ALL 4 sub-questions of the group into Important Bank
+  fireEvent.click(screen.getAllByRole("button", { name: /加入重要題庫/ })[0]);
+  await waitFor(() => expect(events).toHaveLength(4));
+  expect(
+    events.every((e) => e.kind === "card" && e.rating === "review"),
+  ).toBe(true);
 });
 
-it("supports full TOEIC Reading Mock Exam flow: start, flag, submit, review wrong + flagged, manually star to Important Bank, and delete", async () => {
+it("supports full TOEIC Reading Mock Exam flow with whole-group Part 6/7 screen, whole-group flagging, review, starring, and deletion", async () => {
   signedIn = true;
   open("/mock-exam");
   await screen.findByRole("heading", { name: "模擬多益正式考試" });
@@ -651,14 +668,27 @@ it("supports full TOEIC Reading Mock Exam flow: start, flag, submit, review wron
   );
   expect(await screen.findByText(/答題卡（1–100）/)).toBeInTheDocument();
 
-  // Answer question #1 and flag it for post-exam review (must NOT pollute Important Bank)
-  const choicesGroup = screen.getByRole("group", { name: "模擬考作答選項" });
-  fireEvent.click(choicesGroup.querySelector("button")!);
+  // Jump directly to Question #31 (Part 6: a 4-question group, #31–34 shown together!)
+  fireEvent.click(screen.getByRole("button", { name: /跳至第 31 題/ }));
+  expect(await screen.findByLabelText("模擬考閱讀文章")).toBeInTheDocument();
+  expect(
+    screen.getByRole("group", { name: "第 31 題作答選項" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("group", { name: "第 34 題作答選項" }),
+  ).toBeInTheDocument();
+
+  // Answer #31 and flag the ENTIRE group (#31–34) for post-exam review
   fireEvent.click(
-    screen.getByRole("button", { name: /標記本題（考後檢討）/ }),
+    screen
+      .getByRole("group", { name: "第 31 題作答選項" })
+      .querySelector("button")!,
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: /標記本題組（考後檢討）/ }),
   );
   expect(
-    await screen.findByRole("button", { name: /已標記（考後檢討）/ }),
+    await screen.findByRole("button", { name: /已標記本題組（考後檢討）/ }),
   ).toBeInTheDocument();
   expect(events).toHaveLength(0);
 
@@ -676,13 +706,14 @@ it("supports full TOEIC Reading Mock Exam flow: start, flag, submit, review wron
   // Wrong answers were NOT auto-added to Important Bank
   expect(events).toHaveLength(0);
 
-  // Manually star one reviewed question into Important Bank
-  const reviewStarBtn = screen.getAllByRole("button", {
-    name: /加入重要題庫/,
-  })[0];
-  fireEvent.click(reviewStarBtn);
-  await waitFor(() => expect(events).toHaveLength(1));
-  expect(events[0]).toMatchObject({ kind: "card", rating: "review" });
+  // Filter to flagged group (#31–34) and manually star the WHOLE group into Important Bank
+  fireEvent.click(screen.getByRole("tab", { name: /只看考中標記 \(1\)/ }));
+  expect(await screen.findByText("第 31–34 題")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /加入重要題庫/ }));
+  await waitFor(() => expect(events).toHaveLength(4));
+  expect(
+    events.every((e) => e.kind === "card" && e.rating === "review"),
+  ).toBe(true);
 
   // Delete the mock exam record
   fireEvent.click(screen.getByRole("button", { name: "刪除這次測驗" }));

@@ -7,11 +7,13 @@ import { errorMessage } from "../services/api";
 
 export function BookmarkButton({
   entryId,
+  entryIds,
   category,
   itemLabel,
   compact = false,
 }: {
-  entryId: string;
+  entryId?: string;
+  entryIds?: string[];
   category: Category;
   itemLabel?: string;
   compact?: boolean;
@@ -23,26 +25,46 @@ export function BookmarkButton({
   const [guestPrompt, setGuestPrompt] = useState(false);
   const [failed, setFailed] = useState<{
     message: string;
-    event: StudyEvent;
+    events: StudyEvent[];
   } | null>(null);
 
-  const starred = progress.records.some(
-    (row) => row.entry_id === entryId && row.status === "review",
-  );
+  const ids = entryIds?.length
+    ? [...new Set(entryIds)]
+    : entryId
+      ? [entryId]
+      : [];
+  const isGroup = ids.length > 1;
+  const starred =
+    ids.length > 0 &&
+    ids.every((id) =>
+      progress.records.some(
+        (row) => row.entry_id === id && row.status === "review",
+      ),
+    );
   const collectionName = category === "vocabulary" ? "星號單字" : "重要題庫";
-  const subject = itemLabel || entryId;
+  const subject = itemLabel || ids[0] || "";
 
-  async function submitEvent(event: StudyEvent) {
-    if (busy) return;
+  async function submitEvents(batch: StudyEvent[]) {
+    if (busy || !batch.length) return;
     setBusy(true);
     setFailed(null);
+    const remaining: StudyEvent[] = [];
+    let lastError: unknown = null;
     try {
-      await progress.submit(event);
-    } catch (error) {
-      setFailed({
-        message: `${errorMessage(error)} 尚未確認儲存。`,
-        event,
-      });
+      for (const event of batch) {
+        try {
+          await progress.submit(event);
+        } catch (error) {
+          lastError = error;
+          remaining.push(event);
+        }
+      }
+      if (remaining.length > 0) {
+        setFailed({
+          message: `${errorMessage(lastError)} 尚未確認儲存。`,
+          events: remaining,
+        });
+      }
     } finally {
       setBusy(false);
     }
@@ -54,13 +76,25 @@ export function BookmarkButton({
       return;
     }
     setGuestPrompt(false);
-    void submitEvent({
+    const targetRating = starred ? "unseen" : "review";
+    const batch: StudyEvent[] = ids.map((id) => ({
       event_id: createUuid(),
-      entry_id: entryId,
+      entry_id: id,
       kind: "card",
-      rating: starred ? "unseen" : "review",
-    });
+      rating: targetRating,
+    }));
+    void submitEvents(batch);
   }
+
+  const labelText = busy
+    ? "儲存中…"
+    : starred
+      ? isGroup
+        ? `整組已存${collectionName}`
+        : `已存${collectionName}`
+      : isGroup
+        ? `整組加入${collectionName}`
+        : `加入${collectionName}`;
 
   return (
     <div className={`bookmark-control ${compact ? "is-compact" : ""}`}>
@@ -73,17 +107,11 @@ export function BookmarkButton({
             ? `從${collectionName}移除 ${subject}`
             : `將 ${subject} 加入${collectionName}`
         }
-        disabled={busy}
+        disabled={busy || !ids.length}
         onClick={handleClick}
       >
         <span aria-hidden="true">{starred ? "★" : "☆"}</span>
-        <span>
-          {busy
-            ? "儲存中…"
-            : starred
-              ? `已存${collectionName}`
-              : `加入${collectionName}`}
-        </span>
+        <span>{labelText}</span>
       </button>
       {guestPrompt && (
         <span className="bookmark-inline-notice" role="status">
@@ -100,7 +128,7 @@ export function BookmarkButton({
           <button
             type="button"
             className="text-button"
-            onClick={() => void submitEvent(failed.event)}
+            onClick={() => void submitEvents(failed.events)}
           >
             重試
           </button>

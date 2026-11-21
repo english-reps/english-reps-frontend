@@ -183,15 +183,24 @@ export function buildListeningSpeechSegments(question: Listening): {
   segments: string[];
   labels: string[];
 } {
-  const part = question.part ?? 2;
+  return buildListeningGroupSpeechSegments([question]);
+}
+
+export function buildListeningGroupSpeechSegments(group: Listening[]): {
+  segments: string[];
+  labels: string[];
+} {
+  const first = group[0];
+  if (!first) return { segments: [], labels: [] };
+  const part = first.part ?? 2;
   if (part === 1) {
     return {
-      segments: question.options.map((row) => `${row.label}. ${row.text}`),
-      labels: question.options.map((row) => `選項 ${row.label}`),
+      segments: first.options.map((row) => `${row.label}. ${row.text}`),
+      labels: first.options.map((row) => `選項 ${row.label}`),
     };
   }
   if (part === 3 || part === 4) {
-    const turns = splitDialogueTurns(question.audioText || "");
+    const turns = splitDialogueTurns(first.audioText || "");
     const turnSegments = turns.map((turn) => turn.text);
     const turnLabels = turns.map((_, idx) =>
       part === 3
@@ -200,18 +209,51 @@ export function buildListeningSpeechSegments(question: Listening): {
           ? `獨白第 ${idx + 1} 段`
           : "獨白內容",
     );
+    const promptSegments = group.map((item, idx) =>
+      group.length > 1 ? `Question ${idx + 1}. ${item.prompt}` : item.prompt,
+    );
+    const promptLabels = group.map((_, idx) =>
+      group.length > 1 ? `第 ${idx + 1} 小題題目` : "題目問題",
+    );
     return {
-      segments: [...turnSegments, question.prompt],
-      labels: [...turnLabels, "題目問題"],
+      segments: [...turnSegments, ...promptSegments],
+      labels: [...turnLabels, ...promptLabels],
     };
   }
   return {
     segments: [
-      question.audioText || question.prompt,
-      ...question.options.map((row) => `${row.label}. ${row.text}`),
+      first.audioText || first.prompt,
+      ...first.options.map((row) => `${row.label}. ${row.text}`),
     ],
-    labels: ["題目", ...question.options.map((row) => `選項 ${row.label}`)],
+    labels: ["題目", ...first.options.map((row) => `選項 ${row.label}`)],
   };
+}
+
+export interface QuestionUnit<T> {
+  key: string;
+  groupId: string | null;
+  items: T[];
+}
+
+export function groupItemsIntoUnits<
+  T extends { id: string; groupId?: string | null },
+>(items: T[]): QuestionUnit<T>[] {
+  const units: QuestionUnit<T>[] = [];
+  const byGroupId = new Map<string, QuestionUnit<T>>();
+  for (const item of items) {
+    if (item.groupId) {
+      let unit = byGroupId.get(item.groupId);
+      if (!unit) {
+        unit = { key: item.groupId, groupId: item.groupId, items: [] };
+        byGroupId.set(item.groupId, unit);
+        units.push(unit);
+      }
+      unit.items.push(item);
+    } else {
+      units.push({ key: item.id, groupId: null, items: [item] });
+    }
+  }
+  return units;
 }
 
 export const definition = (word: Word) =>
@@ -225,32 +267,28 @@ export function shuffle<T>(items: T[], random = Math.random): T[] {
   return result;
 }
 
+export function pickUnitSession<
+  T extends { id: string; groupId?: string | null },
+>(items: T[], targetQuestions = 10, random = Math.random): QuestionUnit<T>[] {
+  const units = groupItemsIntoUnits(items);
+  if (!units.length) return [];
+  const shuffledUnits = shuffle(units, random);
+  const selected: QuestionUnit<T>[] = [];
+  let total = 0;
+  for (const unit of shuffledUnits) {
+    if (selected.length > 0 && total >= targetQuestions) break;
+    selected.push(unit);
+    total += unit.items.length;
+  }
+  return selected;
+}
+
 export function pickGroupedSession<
   T extends { id: string; groupId?: string | null },
 >(items: T[], limit = 10, random = Math.random): T[] {
-  if (!items.length) return [];
-  const groups: T[][] = [];
-  const byGroupId = new Map<string, T[]>();
-  for (const item of items) {
-    if (item.groupId) {
-      let group = byGroupId.get(item.groupId);
-      if (!group) {
-        group = [];
-        byGroupId.set(item.groupId, group);
-        groups.push(group);
-      }
-      group.push(item);
-    } else {
-      groups.push([item]);
-    }
-  }
-  const shuffledGroups = shuffle(groups, random);
-  const selected: T[] = [];
-  for (const group of shuffledGroups) {
-    if (selected.length >= limit) break;
-    selected.push(...group);
-  }
-  return selected.slice(0, limit);
+  return pickUnitSession(items, limit, random)
+    .flatMap((unit) => unit.items)
+    .slice(0, limit);
 }
 
 export function choices(word: Word, entries: Word[]) {
